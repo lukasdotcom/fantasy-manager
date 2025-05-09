@@ -1,13 +1,22 @@
 import { Kysely, sql } from "kysely";
 
 export async function up(db: Kysely<unknown>): Promise<void> {
+  await sql`UPDATE players SET position='unknown' WHERE position IS NULL`.execute(
+    db,
+  );
+  await sql`UPDATE historicalPlayers SET position='unknown' WHERE position IS NULL`.execute(
+    db,
+  );
+  await sql`DELETE FROM historicalPredictions WHERE matchday IS NULL`.execute(
+    db,
+  );
   await db.schema.alterTable("users").renameTo("users2").execute();
   await db.schema
     .createTable("users")
     .addColumn("id", "integer", (col) =>
       col.primaryKey().autoIncrement().notNull(),
     )
-    .addColumn("username", "varchar", (col) => col.notNull())
+    .addColumn("username", "varchar", (col) => col.defaultTo("").notNull())
     .addColumn("password", "varchar", (col) => col.notNull())
     .addColumn("throttle", "integer", (col) => col.defaultTo(30).notNull())
     .addColumn("active", "boolean", (col) => col.defaultTo(false).notNull())
@@ -19,8 +28,20 @@ export async function up(db: Kysely<unknown>): Promise<void> {
     .addColumn("theme", "varchar")
     .addColumn("locale", "varchar")
     .execute();
-  await sql`INSERT INTO users
-            SELECT *
+  await sql`INSERT INTO users (id, username, password, throttle, active, inactiveDays, google, github, admin,
+                               favoriteLeague, theme, locale)
+            SELECT id,
+                   COALESCE(username, ''),
+                   password,
+                   COALESCE(throttle, 30),
+                   COALESCE(active, false),
+                   COALESCE(inactiveDays, 0),
+                   COALESCE(google, ''),
+                   COALESCE(github, ''),
+                   COALESCE(admin, false),
+                   favoriteLeague,
+                   theme,
+                   locale
             FROM users2`.execute(db);
   await db.schema.dropTable("users2").execute();
 
@@ -44,8 +65,23 @@ export async function up(db: Kysely<unknown>): Promise<void> {
     .addColumn("league", "varchar", (col) => col.notNull())
     .addPrimaryKeyConstraint("players_pkey", ["uid", "league"])
     .execute();
-  await sql`INSERT INTO players
-            SELECT *
+  await sql`INSERT INTO players (uid, name, nameAscii, club, pictureID, value, sale_price, position, forecast,
+                                 total_points, average_points, last_match, locked, "exists", league)
+            SELECT uid,
+                   name,
+                   nameAscii,
+                   club,
+                   pictureID,
+                   value,
+                   sale_price,
+                   position,
+                   forecast,
+                   total_points,
+                   average_points,
+                   last_match,
+                   locked,
+                   "exists",
+                   league
             FROM players2`.execute(db);
   await db.schema.dropTable("players2").execute();
 
@@ -55,8 +91,8 @@ export async function up(db: Kysely<unknown>): Promise<void> {
     .addColumn("value1", "varchar", (col) => col.notNull().primaryKey())
     .addColumn("value2", "varchar", (col) => col.notNull())
     .execute();
-  await sql`INSERT INTO data
-            SELECT *
+  await sql`INSERT INTO data (value1, value2)
+            SELECT value1, value2
             FROM data2`.execute(db);
   await db.schema.dropTable("data2").execute();
 
@@ -100,8 +136,25 @@ export async function up(db: Kysely<unknown>): Promise<void> {
     .addColumn("active", "boolean", (col) => col.defaultTo(false).notNull())
     .addColumn("inactiveDays", "integer", (col) => col.defaultTo(0).notNull())
     .execute();
-  await sql`INSERT INTO leagueSettings
-            SELECT *
+  await sql`INSERT INTO leagueSettings (leagueName, startMoney, transfers, duplicatePlayers, starredPercentage, league,
+                                        archived, matchdayTransfers, fantasyEnabled, predictionsEnabled, predictWinner,
+                                        predictDifference, predictExact, top11, active, inactiveDays)
+            SELECT leagueName,
+                   COALESCE(startMoney, 150000000),
+                   COALESCE(transfers, 6),
+                   COALESCE(duplicatePlayers, 1),
+                   COALESCE(starredPercentage, 150),
+                   league,
+                   COALESCE(archived, 0),
+                   COALESCE(matchdayTransfers, false),
+                   COALESCE(fantasyEnabled, true),
+                   COALESCE(predictionsEnabled, true),
+                   COALESCE(predictWinner, 2),
+                   COALESCE(predictDifference, 5),
+                   COALESCE(predictExact, 15),
+                   COALESCE(top11, false),
+                   COALESCE(active, false),
+                   COALESCE(inactiveDays, 0)
             FROM leagueSettings2`.execute(db);
   await db.schema.dropTable("leagueSettings2").execute();
 
@@ -123,8 +176,17 @@ export async function up(db: Kysely<unknown>): Promise<void> {
     .addColumn("tutorial", "boolean", (col) => col.defaultTo(true).notNull())
     .addPrimaryKeyConstraint("leagueUsers_pkey", ["leagueID", "user"])
     .execute();
-  await sql`INSERT INTO leagueUsers
-            SELECT *
+  await sql`INSERT INTO leagueUsers (leagueID, user, points, money, formation, admin, tutorial, fantasyPoints,
+                                     predictionPoints)
+            SELECT leagueID,
+                   user,
+                   COALESCE(points, 0),
+                   money,
+                   COALESCE(formation, '[1,4,4,2]'),
+                   COALESCE(admin, false),
+                   COALESCE(tutorial, true),
+                   COALESCE(fantasyPoints, 0),
+                   COALESCE(predictionPoints, 0)
             FROM leagueUsers2`.execute(db);
   await db.schema.dropTable("leagueUsers2").execute();
 
@@ -143,8 +205,15 @@ export async function up(db: Kysely<unknown>): Promise<void> {
     .addColumn("time", "integer")
     .addPrimaryKeyConstraint("points_pkey", ["leagueID", "user", "matchday"])
     .execute();
-  await sql`INSERT INTO points
-            SELECT *
+  await sql`INSERT INTO points (leagueID, user, points, matchday, money, time, fantasyPoints, predictionPoints)
+            SELECT leagueID,
+                   user,
+                   COALESCE(points, 0),
+                   matchday,
+                   money,
+                   time,
+                   COALESCE(fantasyPoints, 0),
+                   COALESCE(predictionPoints, 0)
             FROM points2`.execute(db);
   await db.schema.dropTable("points2").execute();
 
@@ -160,8 +229,15 @@ export async function up(db: Kysely<unknown>): Promise<void> {
     .addColumn("starred", "boolean", (col) => col.defaultTo(false).notNull())
     .addColumn("max", "integer", (col) => col.notNull())
     .execute();
-  await sql`INSERT INTO transfers
-            SELECT *
+  await sql`INSERT INTO transfers (leagueID, seller, buyer, playeruid, value, position, starred, max)
+            SELECT leagueID,
+                   seller,
+                   buyer,
+                   playeruid,
+                   value,
+                   COALESCE(position, 'bench'),
+                   COALESCE(starred, false),
+                   max
             FROM transfers2`.execute(db);
   await db.schema.dropTable("transfers2").execute();
 
@@ -172,8 +248,8 @@ export async function up(db: Kysely<unknown>): Promise<void> {
     .addColumn("leagueID", "integer", (col) => col.notNull())
     .addPrimaryKeyConstraint("invite_pkey", ["inviteID"])
     .execute();
-  await sql`INSERT INTO invite
-            SELECT *
+  await sql`INSERT INTO invite (inviteID, leagueID)
+            SELECT inviteID, leagueID
             FROM invite2`.execute(db);
   await db.schema.dropTable("invite2").execute();
 
@@ -187,8 +263,8 @@ export async function up(db: Kysely<unknown>): Promise<void> {
     .addColumn("starred", "boolean", (col) => col.defaultTo(false).notNull())
     .addPrimaryKeyConstraint("squad_pkey", ["leagueID", "user", "playeruid"])
     .execute();
-  await sql`INSERT INTO squad
-            SELECT *
+  await sql`INSERT INTO squad (leagueID, user, playeruid, position, starred)
+            SELECT leagueID, user, playeruid, position, COALESCE(starred, false)
             FROM squad2`.execute(db);
   await db.schema.dropTable("squad2").execute();
 
@@ -211,9 +287,11 @@ export async function up(db: Kysely<unknown>): Promise<void> {
       "playeruid",
     ])
     .execute();
-  await sql`INSERT INTO historicalSquad
-            SELECT *
-            FROM historicalSquad2`.execute(db);
+  await sql`INSERT INTO historicalSquad (matchday, leagueID, user, playeruid, position, starred)
+            SELECT matchday, leagueID, user, playeruid, position, COALESCE(starred, false)
+            FROM historicalSquad2
+            WHERE 1 = 1
+            ON CONFLICT DO NOTHING`.execute(db);
   await db.schema.dropTable("historicalSquad2").execute();
 
   await db.schema
@@ -243,8 +321,23 @@ export async function up(db: Kysely<unknown>): Promise<void> {
       "league",
     ])
     .execute();
-  await sql`INSERT INTO historicalPlayers
-            SELECT *
+  await sql`INSERT INTO historicalPlayers (time, uid, name, nameAscii, club, pictureID, value, sale_price, position,
+                                           forecast, total_points, average_points, last_match, "exists", league)
+            SELECT time,
+                   uid,
+                   name,
+                   nameAscii,
+                   club,
+                   pictureID,
+                   value,
+                   sale_price,
+                   position,
+                   forecast,
+                   total_points,
+                   average_points,
+                   last_match,
+                   "exists",
+                   league
             FROM historicalPlayers2`.execute(db);
   await db.schema.dropTable("historicalPlayers2").execute();
 
@@ -261,8 +354,8 @@ export async function up(db: Kysely<unknown>): Promise<void> {
     .addColumn("playeruid", "varchar", (col) => col.notNull())
     .addColumn("value", "integer", (col) => col.notNull())
     .execute();
-  await sql`INSERT INTO historicalTransfers
-            SELECT *
+  await sql`INSERT INTO historicalTransfers (matchday, leagueID, seller, buyer, playeruid, value)
+            SELECT matchday, leagueID, seller, buyer, playeruid, value
             FROM historicalTransfers2`.execute(db);
   await db.schema.dropTable("historicalTransfers2").execute();
 
@@ -281,8 +374,18 @@ export async function up(db: Kysely<unknown>): Promise<void> {
     .addColumn("exists", "boolean", (col) => col.notNull().defaultTo(true))
     .addPrimaryKeyConstraint("clubs_pkey", ["club", "league"])
     .execute();
-  await sql`INSERT INTO clubs
-            SELECT *
+  await sql`INSERT INTO clubs (club, gameStart, gameEnd, opponent, teamScore, opponentScore, league, home, "exists",
+                               fullName)
+            SELECT club,
+                   gameStart,
+                   gameEnd,
+                   opponent,
+                   teamScore,
+                   opponentScore,
+                   league,
+                   home,
+                   COALESCE("exists", true),
+                   fullName
             FROM clubs2`.execute(db);
   await db.schema.dropTable("clubs2").execute();
 
@@ -304,8 +407,18 @@ export async function up(db: Kysely<unknown>): Promise<void> {
     .addColumn("exists", "boolean", (col) => col.notNull().defaultTo(true))
     .addPrimaryKeyConstraint("historicalClubs_pkey", ["club", "league", "time"])
     .execute();
-  await sql`INSERT INTO historicalClubs
-            SELECT *
+  await sql`INSERT INTO historicalClubs (club, opponent, teamScore, opponentScore, league, home, time, "exists",
+                                         fullName, gameStart)
+            SELECT club,
+                   opponent,
+                   teamScore,
+                   opponentScore,
+                   league,
+                   home,
+                   time,
+                   COALESCE("exists", true),
+                   fullName,
+                   gameStart
             FROM historicalClubs2`.execute(db);
   await db.schema.dropTable("historicalClubs2").execute();
 
@@ -324,8 +437,8 @@ export async function up(db: Kysely<unknown>): Promise<void> {
       "gameStart",
     ])
     .execute();
-  await sql`INSERT INTO futureClubs
-            SELECT *
+  await sql`INSERT INTO futureClubs (club, fullName, gameStart, opponent, league, home)
+            SELECT club, fullName, gameStart, opponent, league, home
             FROM futureClubs2`.execute(db);
   await db.schema.dropTable("futureClubs2").execute();
 
@@ -342,8 +455,17 @@ export async function up(db: Kysely<unknown>): Promise<void> {
     .addColumn("localeActive", "varchar", (col) => col.notNull())
     .addColumn("localeTotal", "varchar", (col) => col.notNull())
     .execute();
-  await sql`INSERT INTO analytics
-            SELECT *
+  await sql`INSERT INTO analytics (day, versionActive, versionTotal, leagueActive, leagueTotal, themeActive, themeTotal,
+                                   localeActive, localeTotal)
+            SELECT day,
+                   versionActive,
+                   versionTotal,
+                   leagueActive,
+                   leagueTotal,
+                   themeActive,
+                   themeTotal,
+                   localeActive,
+                   localeTotal
             FROM analytics2`.execute(db);
   await db.schema.dropTable("analytics2").execute();
 
@@ -366,9 +488,22 @@ export async function up(db: Kysely<unknown>): Promise<void> {
     .addColumn("localeTotal", "varchar", (col) => col.notNull())
     .addPrimaryKeyConstraint("detailedAnalytics_pkey", ["serverID", "day"])
     .execute();
-  await sql`INSERT INTO detailedAnalytics
-            SELECT *
-            FROM detailedAnalytics2`.execute(db);
+  await sql`INSERT INTO detailedAnalytics (serverID, day, version, active, total, leagueActive, leagueTotal,
+                                           themeActive, themeTotal, localeActive, localeTotal)
+            SELECT serverID,
+                   day,
+                   version,
+                   active,
+                   total,
+                   leagueActive,
+                   leagueTotal,
+                   themeActive,
+                   themeTotal,
+                   localeActive,
+                   localeTotal
+            FROM detailedAnalytics2
+            WHERE 1 = 1
+            ON CONFLICT DO NOTHING`.execute(db);
   await db.schema.dropTable("detailedAnalytics2").execute();
 
   await db.schema
@@ -382,8 +517,8 @@ export async function up(db: Kysely<unknown>): Promise<void> {
     .addColumn("title", "varchar", (col) => col.notNull())
     .addColumn("description", "varchar", (col) => col.notNull())
     .execute();
-  await sql`INSERT INTO announcements
-            SELECT *
+  await sql`INSERT INTO announcements (leagueID, priority, title, description)
+            SELECT leagueID, priority, title, description
             FROM announcements2`.execute(db);
   await db.schema.dropTable("announcements2").execute();
 
@@ -397,8 +532,8 @@ export async function up(db: Kysely<unknown>): Promise<void> {
     .addColumn("url", "varchar", (col) => col.primaryKey().notNull())
     .addColumn("version", "varchar", (col) => col.notNull().defaultTo(""))
     .execute();
-  await sql`INSERT INTO plugins
-            SELECT *
+  await sql`INSERT INTO plugins (name, settings, enabled, url, version, installed)
+            SELECT name, settings, COALESCE(enabled, false), url, COALESCE(version, ''), COALESCE(installed, false)
             FROM plugins2`.execute(db);
   await db.schema.dropTable("plugins2").execute();
 
@@ -416,8 +551,12 @@ export async function up(db: Kysely<unknown>): Promise<void> {
     .addColumn("height", "integer", (col) => col.defaultTo(0).notNull())
     .addColumn("width", "integer", (col) => col.defaultTo(0).notNull())
     .execute();
-  await sql`INSERT INTO pictures
-            SELECT *
+  await sql`INSERT INTO pictures (url, downloaded, height, width, downloading)
+            SELECT url,
+                   COALESCE(downloaded, false),
+                   COALESCE(height, 0),
+                   COALESCE(width, 0),
+                   COALESCE(downloading, false)
             FROM pictures2`.execute(db);
   await db.schema.dropTable("pictures2").execute();
 
@@ -432,8 +571,8 @@ export async function up(db: Kysely<unknown>): Promise<void> {
     .addColumn("away", "integer")
     .addPrimaryKeyConstraint("predictions_pkey", ["leagueID", "user", "club"])
     .execute();
-  await sql`INSERT INTO predictions
-            SELECT *
+  await sql`INSERT INTO predictions (leagueID, user, club, league, home, away)
+            SELECT leagueID, user, club, league, home, away
             FROM predictions2`.execute(db);
   await db.schema.dropTable("predictions2").execute();
 
@@ -457,9 +596,11 @@ export async function up(db: Kysely<unknown>): Promise<void> {
       "matchday",
     ])
     .execute();
-  await sql`INSERT INTO historicalPredictions
-            SELECT *
-            FROM historicalPredictions2`.execute(db);
+  await sql`INSERT INTO historicalPredictions (matchday, leagueID, user, club, league, home, away)
+            SELECT matchday, leagueID, user, club, league, home, away
+            FROM historicalPredictions2
+            WHERE 1 = 1
+            ON CONFLICT DO NOTHING`.execute(db);
   await db.schema.dropTable("historicalPredictions2").execute();
 
   await db.schema
@@ -482,8 +623,8 @@ export async function up(db: Kysely<unknown>): Promise<void> {
       "gameStart",
     ])
     .execute();
-  await sql`INSERT INTO futurePredictions
-            SELECT *
+  await sql`INSERT INTO futurePredictions (leagueID, user, club, league, gameStart, home, away)
+            SELECT leagueID, user, club, league, gameStart, home, away
             FROM futurePredictions2`.execute(db);
   await db.schema.dropTable("futurePredictions2").execute();
 

@@ -239,9 +239,9 @@ async function startUp() {
 
   if (dbVersionEntry) {
     const storedDbVersion = dbVersionEntry.value2;
-    if (compareSemanticVersions(storedDbVersion, "1.21.0") === 1) {
+    if (compareSemanticVersions(storedDbVersion, "1.20.3") === 1) {
       console.error(
-        `Cannot upgrade from database version ${storedDbVersion} (produced before program version 1.20.3). Please upgrade to 1.21 first.`,
+        `Cannot upgrade from database version ${storedDbVersion} (produced before program version 1.20.3). Please upgrade to 1.20.3 first.`,
       );
       process.exit(1);
     }
