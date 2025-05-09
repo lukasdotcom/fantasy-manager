@@ -3,14 +3,11 @@ import redirect from "../../Modules/league";
 import Head from "next/head";
 import { useContext, useEffect, useState } from "react";
 import { stringToColor, UserChip } from "../../components/Username";
-import connect from "../../Modules/database";
+import db from "../../Modules/database";
 import {
   announcements,
   anouncementColor,
-  invite,
   leagueSettings,
-  leagueUsers,
-  points,
 } from "#types/database";
 import Link from "../../components/Link";
 import {
@@ -641,99 +638,70 @@ export const getServerSideProps: GetServerSideProps = async (
   // Gets the user id
   const session = await getServerSession(ctx.req, ctx.res, authOptions);
   const user = session ? session.user.id : -1;
+  const leagueID = parseInt(String(ctx.params?.league));
   // Gets the leaderboard for the league
-  const standings = await new Promise<standingsData[]>(async (resolve) => {
-    const connection = await connect();
-    resolve(
-      await connection.query(
-        "SELECT user, points, fantasyPoints, predictionPoints FROM leagueUsers WHERE leagueId=?",
-        [ctx.params?.league],
-      ),
-    );
-    connection.end();
-  });
+  const standings: standingsData[] = await db
+    .selectFrom("leagueUsers")
+    .select(["user", "points", "fantasyPoints", "predictionPoints"])
+    .where("leagueID", "=", leagueID)
+    .execute();
   // Gets the historical amount of points for every matchday in the league
   const historicalPoints = new Promise<historialData>(async (resolve) => {
-    const connection = await connect();
-    const results: points[] = await connection.query(
-      "SELECT user, points, fantasyPoints, predictionPoints, matchday FROM points WHERE leagueId=? ORDER BY matchday ASC",
-      [ctx.params?.league],
-    );
-    connection.end();
+    const results = await db
+      .selectFrom("points")
+      .where("leagueID", "=", leagueID)
+      .selectAll()
+      .execute();
     // Reformats the result into a dictionary that has an entry for each user and each entry for that user is an array of all the points the user has earned in chronological order.
-    if (results.length > 0) {
-      const points: historialData = {};
-      results.forEach((element: points) => {
-        if (points[element.user]) {
-          points[String(element.user)].push({
+    const points: historialData = {};
+    results.forEach((element) => {
+      if (points[element.user]) {
+        points[String(element.user)].push({
+          totalPoints: element.points,
+          fantasyPoints: element.fantasyPoints,
+          predictionPoints: element.predictionPoints,
+        });
+      } else {
+        points[String(element.user)] = [
+          {
             totalPoints: element.points,
             fantasyPoints: element.fantasyPoints,
             predictionPoints: element.predictionPoints,
-          });
-        } else {
-          points[String(element.user)] = [
-            {
-              totalPoints: element.points,
-              fantasyPoints: element.fantasyPoints,
-              predictionPoints: element.predictionPoints,
-            },
-          ];
-        }
-      });
-      resolve(points);
-    } else {
-      resolve({});
-    }
-  });
-  const inviteLinks = new Promise<string[]>(async (resolve) => {
-    // Gets an array of invite links for this league
-    const connection = await connect();
-    const results: invite[] = await connection.query(
-      "SELECT * FROM invite WHERE leagueId=?",
-      [ctx.params?.league],
-    );
-    connection.end();
-    // Turns the result into a list of valid invite links
-    const inviteLinks: string[] = [];
-    results.forEach((val) => {
-      inviteLinks.push(val.inviteID);
+          },
+        ];
+      }
     });
-    resolve(inviteLinks);
-  }).then((val) => JSON.parse(JSON.stringify(val)));
+    resolve(points);
+  });
+  const inviteLinks = db
+    .selectFrom("invite")
+    .select("inviteID")
+    .where("leagueID", "=", leagueID)
+    .execute()
+    .then((e) => e.map((val) => val.inviteID));
   // Checks if the user is an admin
-  const data = new Promise<[boolean, boolean]>(async (res) => {
-    const connection = await connect();
-    const result: leagueUsers[] = await connection.query(
-      "SELECT * FROM leagueUsers WHERE leagueID=? AND user=?",
-      [ctx.params?.league, user],
-    );
-
-    res(
-      result.length > 0
-        ? [result[0].admin, result[0].tutorial]
-        : [false, false],
-    );
-    connection.end();
-  });
-  const announcements = new Promise<announcements[]>(async (res) => {
-    const connection = await connect();
-    res(
-      await connection.query("SELECT * FROM announcements WHERE leagueID=?", [
-        ctx.params?.league,
-      ]),
-    );
-    connection.end();
-  });
-  const adminUsers = new Promise<AdminUserData[]>(async (res) => {
-    const connection = await connect();
-    res(
-      await connection.query(
-        "SELECT user, admin FROM leagueUsers WHERE leagueID=?",
-        [ctx.params?.league],
-      ),
-    );
-    connection.end();
-  });
+  const data = db
+    .selectFrom("leagueUsers")
+    .where("leagueID", "=", leagueID)
+    .where("user", "=", user)
+    .select(["admin", "tutorial"])
+    .executeTakeFirst()
+    .then((e) => {
+      return {
+        admin: e ? e.admin : false,
+        tutorial: e ? e.tutorial : false,
+      };
+    });
+  const announcements = db
+    .selectFrom("announcements")
+    .selectAll()
+    .where("leagueID", "=", leagueID)
+    .execute();
+  const adminUsers: Promise<AdminUserData[]> = db
+    .selectFrom("leagueUsers")
+    .select(["user", "admin"])
+    .where("leagueID", "=", leagueID)
+    .execute();
   let startFilter: HistoricalDataTypes = "totalPoints";
   const standings_user = standings.filter((val) => val.user === user);
   if (standings_user.length > 0) {
@@ -752,8 +720,8 @@ export const getServerSideProps: GetServerSideProps = async (
   }
   return redirect(ctx, {
     OGannouncement: await announcements,
-    admin: (await data)[0],
-    tutorial: (await data)[1],
+    admin: (await data).admin,
+    tutorial: (await data).tutorial,
     standings: standings,
     historicalPoints: await historicalPoints,
     inviteLinks: await inviteLinks,

@@ -19,6 +19,7 @@ COPY tsconfig2.json tsconfig2.json
 COPY types types
 COPY locales locales
 ENV SQLITE=/app/temp.db
+RUN npm ci
 RUN npm run build
 RUN rm /app/temp.db
 RUN rm -rf /app/scripts/data

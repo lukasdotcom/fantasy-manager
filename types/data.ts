@@ -1,16 +1,14 @@
-import { forecast, position } from "#types/database";
-
 export interface players {
   uid: string; // This is the unique id of the player
   name: string; // This is the name of the player
   club: string; // This is the club of the player
-  pictureUrl: string; // This is the url of the picture of the player
+  pictureUrl: string; // This is the url of the picture of the player // Note this is always an empty string when passed to the plugin
   height: number; // This is the height of the picture of the player
   width: number; // This is the width of the picture of the player
   value: number; // This is the value of the player
   sale_price?: number; // This is the sale price of the player
-  position: position; // This is the position of the player
-  forecast?: forecast; // This is the forecast of the player where a is attending u is unknown and m is missing
+  position: string; // This is the position of the player
+  forecast?: string; // This is the forecast of the player where a is attending u is unknown and m is missing
   total_points?: number; // This is the total points of the player
   average_points?: number; // This is the average points of the player per game
   last_match?: number; // This is the points in the last match of the player
@@ -23,7 +21,7 @@ export interface clubs {
   fullName?: string; // This is the full name of the club
   gameStart: number; // This is the start time of the game
   gameEnd: number; // This is the end time of the game
-  opponent: string; // This is the name of the opponent
+  opponent?: string; // This is the name of the opponent
   teamScore?: number; // This is the score of the team
   opponentScore?: number; // This is the score of the opponent
   league: string; // This is the name of the league

@@ -1,9 +1,9 @@
-import connect from "#database";
+import db from "#database";
 import { NextApiRequest, NextApiResponse } from "next";
 import { getServerSession } from "next-auth";
 import { authOptions } from "#/pages/api/auth/[...nextauth]";
 import { settings } from "#/pages/admin";
-import { default_theme_dark, default_theme_light } from "#/scripts/startup";
+import { default_theme_dark, default_theme_light } from "#scripts/migrate";
 
 export default async function handler(
   req: NextApiRequest,
@@ -99,13 +99,15 @@ export default async function handler(
           }),
         });
       }
-      const connection = await connect();
-      await connection.query(
-        "INSERT INTO data (value1, value2) VALUES (?, ?) ON DUPLICATE KEY UPDATE value2=?",
-        ["config" + name, value, value],
-      );
+      await db
+        .insertInto("data")
+        .values({
+          value1: "config" + name,
+          value2: value,
+        })
+        .onConflict((e) => e.doUpdateSet({ value2: value }))
+        .execute();
       res.status(200).end("Saved config change");
-      connection.end();
       break;
     default:
       res.status(405).end(`Method ${req.method} Not Allowed`);

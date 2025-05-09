@@ -3,7 +3,6 @@ import redirect from "../../Modules/league";
 import Head from "next/head";
 import { SquadPlayer as Player } from "../../components/Player";
 import { useContext, useState } from "react";
-import connect from "../../Modules/database";
 import { leagueSettings } from "#types/database";
 import {
   Alert,
@@ -57,11 +56,19 @@ export default function Home({
       bench: squadMember[];
     } = { att: [], mid: [], def: [], gk: [], bench: [] };
     leagueInfo.players.forEach((e) => {
-      players[e.position].push({
-        playeruid: e.playeruid,
-        starred: e.starred,
-        status: e.status,
-      });
+      if (
+        e.position === "att" ||
+        e.position === "mid" ||
+        e.position === "def" ||
+        e.position === "gk" ||
+        e.position === "bench"
+      ) {
+        players[e.position].push({
+          playeruid: e.playeruid,
+          starred: e.starred,
+          status: e.status,
+        });
+      }
     });
     return players;
   });
@@ -138,11 +145,19 @@ export default function Home({
         bench: squadMember[];
       } = { att: [], mid: [], def: [], gk: [], bench: [] };
       val.players.forEach((e) => {
-        players[e.position].push({
-          playeruid: e.playeruid,
-          starred: e.starred,
-          status: e.status,
-        });
+        if (
+          e.position === "att" ||
+          e.position === "mid" ||
+          e.position === "def" ||
+          e.position === "gk" ||
+          e.position === "bench"
+        ) {
+          players[e.position].push({
+            playeruid: e.playeruid,
+            starred: e.starred,
+            status: e.status,
+          });
+        }
       });
       setFormation(val.formation);
       setSquad(players);
@@ -362,7 +377,6 @@ export default function Home({
 
 // Gets the users session
 export const getServerSideProps: GetServerSideProps = async (ctx) => {
-  const connection = await connect();
   const session = await getServerSession(ctx.req, ctx.res, authOptions);
   // Gets the league info
   const leagueInfo: LeagueInfo | void = await getLeagueInfo(
@@ -371,6 +385,5 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
   ).catch((e) => {
     console.error(e);
   });
-  connection.end();
   return await redirect(ctx, { leagueInfo });
 };

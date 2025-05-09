@@ -9,9 +9,9 @@ import Menu from "../components/Menu";
 import { Providers, getProviders } from "../types/providers";
 import Link from "../components/Link";
 import { TranslateContext } from "../Modules/context";
-import connect from "#/Modules/database";
 import { getData } from "./api/theme";
 import { getProviderDetails } from "./signin";
+import db from "#database";
 interface Props {
   enabledProviders: Providers[];
   enablePasswordSignup: boolean;
@@ -135,18 +135,17 @@ export default function SignIn({
 }
 // Gets the list of providers
 export const getStaticProps: GetStaticProps = async (ctx) => {
-  const connection = await connect();
   const props: Props = {
     enabledProviders: getProviders(),
     enablePasswordSignup:
       getProviders().length === 0 ||
-      (await connection
-        .query(
-          "SELECT * FROM data WHERE value1='configEnablePasswordSignup' AND value2='1'",
-        )
-        .then((res) => res.length > 0)),
+      (await db
+        .selectFrom("data")
+        .selectAll()
+        .where("value1", "=", "configEnablePasswordSignup")
+        .where("value2", "=", "1")
+        .executeTakeFirst()) !== undefined,
   };
-  await connection.end();
   return {
     props: {
       ...props,

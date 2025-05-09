@@ -1,4 +1,4 @@
-import connect from "./database";
+import db from "./database";
 
 /**
 + * Deletes a user from a league and performs related cleanup tasks.
@@ -8,50 +8,75 @@ import connect from "./database";
 + * @return {Promise<void>} A promise that resolves once the user has been removed
 + */
 export async function leaveLeague(league: number, user: number): Promise<void> {
-  const connection = await connect();
-  await connection.query(
-    "DELETE FROM leagueUsers WHERE leagueID=? and user=?",
-    [league, user],
-  );
-  await connection.query("DELETE FROM points WHERE leagueID=? and user=?", [
-    league,
-    user,
-  ]);
-  await connection.query("DELETE FROM squad WHERE leagueID=? and user=?", [
-    league,
-    user,
-  ]);
-  await connection.query(
-    "DELETE FROM historicalSquad WHERE leagueID=? AND user=?",
-    [league, user],
-  );
-  await connection.query(
-    "DELETE FROM historicalTransfers WHERE leagueID=? and (buyer=? and seller=0) OR (seller=? and buyer=0) ",
-    [league, user, user],
-  );
-  await connection.query(
-    "UPDATE transfers SET seller='0' WHERE leagueID=? and seller=?",
-    [league, user],
-  );
-  await connection.query(
-    "UPDATE transfers SET buyer='0' WHERE leagueID=? and buyer=?",
-    [league, user],
-  );
+  await db
+    .deleteFrom("leagueUsers")
+    .where("leagueID", "=", league)
+    .where("user", "=", user)
+    .execute();
+  await db
+    .deleteFrom("points")
+    .where("leagueID", "=", league)
+    .where("user", "=", user)
+    .execute();
+  await db
+    .deleteFrom("squad")
+    .where("leagueID", "=", league)
+    .where("user", "=", user)
+    .execute();
+  await db
+    .deleteFrom("historicalSquad")
+    .where("leagueID", "=", league)
+    .where("user", "=", user)
+    .execute();
+  await db
+    .deleteFrom("historicalTransfers")
+    .where("leagueID", "=", league)
+    .where((eb) =>
+      eb.or([
+        eb.and([eb("buyer", "=", user), eb("seller", "=", 0)]),
+        eb.and([eb("buyer", "=", 0), eb("seller", "=", user)]),
+      ]),
+    )
+    .execute();
+  await db
+    .updateTable("transfers")
+    .set("seller", 0)
+    .where("leagueID", "=", league)
+    .where("seller", "=", user)
+    .execute();
+  await db
+    .updateTable("transfers")
+    .set("buyer", 0)
+    .where("leagueID", "=", league)
+    .where("buyer", "=", user)
+    .execute();
   console.log(`User ${user} left league ${league}`);
   // Checks if the league still has users
-  const isEmpty = await connection
-    .query("SELECT * FROM leagueUsers WHERE leagueID=?", [league])
-    .then((res) => res.length == 0);
+  const isEmpty = await db
+    .selectFrom("leagueUsers")
+    .selectAll()
+    .where("leagueID", "=", league)
+    .execute()
+    .then((e) => e.length === 0);
   if (isEmpty) {
-    connection.query("DELETE FROM invite WHERE leagueID=?", [league]);
-    connection.query("DELETE FROM transfers WHERE leagueID=?", [league]);
-    connection.query("DELETE FROM leagueSettings WHERE leagueId=?", [league]);
-    connection.query("DELETE FROM historicalTransfers WHERE leagueID=?", [
-      league,
-    ]);
-    connection.query("DELETE FROM historicalSquad WHERE leagueID=?", [league]);
-    connection.query("DELETE FROM announcements WHERE leagueID=?", [league]);
+    await db.deleteFrom("invite").where("leagueID", "=", league).execute();
+    await db.deleteFrom("transfers").where("leagueID", "=", league).execute();
+    await db
+      .deleteFrom("leagueSettings")
+      .where("leagueID", "=", league)
+      .execute();
+    await db
+      .deleteFrom("historicalTransfers")
+      .where("leagueID", "=", league)
+      .execute();
+    await db
+      .deleteFrom("historicalSquad")
+      .where("leagueID", "=", league)
+      .execute();
+    await db
+      .deleteFrom("announcements")
+      .where("leagueID", "=", league)
+      .execute();
     console.log(`League ${league} is now empty and is being deleted`);
   }
-  connection.end();
 }

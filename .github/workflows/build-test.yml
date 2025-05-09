@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       NODE_ENV: test
-      SQLITE: db.db
+      SQLITE: test.db
     strategy:
       matrix:
         node-version: [22.x]
@@ -33,3 +33,5 @@ jobs:
       - run: npm run lint
       # Builds the project
       - run: npm run build
+      # Checks the db types
+      - run: npm run dbtypes:check

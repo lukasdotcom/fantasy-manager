@@ -1,12 +1,13 @@
 import Head from "next/head";
 import Menu from "../../../../components/Menu";
-import connect from "../../../../Modules/database";
 import redirect from "../../../../Modules/league";
 import { Player, HistoricalPlayer } from "../../../../components/Player";
 import { useRouter } from "next/router";
 import { Box, FormLabel, Pagination, PaginationItem } from "@mui/material";
 import { useContext } from "react";
 import { TranslateContext } from "../../../../Modules/context";
+import { sql } from "kysely";
+import db from "#database";
 export default function HistoricalView({
   user,
   username,
@@ -261,41 +262,34 @@ export default function HistoricalView({
 }
 
 export async function getServerSideProps(ctx) {
-  const connection = await connect();
   const user = ctx.params.user;
   const league = ctx.params.league;
   const [squad, transfers, username, latestMatchday, money] = await Promise.all(
     [
       // Gets the latest squad of the user
-      connection.query("SELECT * FROM squad WHERE leagueID=? AND user=?", [
-        league,
-        user,
-      ]),
+      sql`SELECT * FROM squad WHERE leagueID=${league} AND user=${user}`
+        .execute(db)
+        .then((e) => e.rows),
       // Gets all transfers at the moment from the user
-      connection.query(
-        "SELECT * FROM transfers WHERE leagueID=? AND (buyer=? OR seller=?)",
-        [league, user, user],
-      ),
+      sql`SELECT * FROM transfers WHERE leagueID=${league} AND (buyer=${user} OR seller=${user})`
+        .execute(db)
+        .then((e) => e.rows),
       // Gets the username of the user
-      connection
-        .query("SELECT username FROM users WHERE id=?", [user])
+      sql`SELECT username FROM users WHERE id=${user}`
+        .execute(db)
+        .then((e) => e.rows)
         .then((e) => (e.length > 0 ? e[0].username : "")),
       // Gets the latest matchday in that league
-      connection
-        .query(
-          "SELECT matchday FROM points WHERE leagueID=? and user=? ORDER BY matchday DESC",
-          [league, user],
-        )
+      sql`SELECT matchday FROM points WHERE leagueID=${league} and user=${user} ORDER BY matchday DESC`
+        .execute(db)
+        .then((e) => e.rows)
         .then((res) => (res.length > 0 ? res[0].matchday : 0)),
-      connection
-        .query("SELECT money FROM leagueUsers WHERE leagueID=? and user=?", [
-          league,
-          user,
-        ])
+      sql`SELECT money FROM leagueUsers WHERE leagueID=${league} and user=${user}`
+        .execute(db)
+        .then((e) => e.rows)
         .then((res) => (res.length > 0 ? res[0].money : 0)),
     ],
   );
-  connection.end();
   // Checks if the user exists
   if (username === "") {
     return {

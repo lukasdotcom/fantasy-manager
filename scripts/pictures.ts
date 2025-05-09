@@ -1,144 +1,171 @@
-import connect from "../Modules/database";
-import { pictures } from "#types/database";
+import db from "../Modules/database";
+import { Pictures } from "#type/db";
 import { existsSync, mkdirSync, rmSync, createWriteStream } from "fs";
 import { rename } from "fs/promises";
 import { Readable } from "stream";
 import { finished } from "stream/promises";
 import { ReadableStream } from "stream/web";
+import { Selectable } from "kysely";
+
 // Used to get the correct path for a picture and will also make the folder if needed
-export function picturePath(id: number, makeFolder = false) {
-  if (makeFolder && !existsSync("./players/" + (id % 100))) {
-    mkdirSync("./players/" + (id % 100));
+export function picturePath(id: number, makeFolder = false): string {
+  const subfolderPath = `./players/${id % 100}`;
+  if (makeFolder && !existsSync("./players/")) {
+    mkdirSync("./players/"); // Ensure base ./players directory exists
   }
-  return "./players/" + (id % 100) + "/" + id + ".jpg";
+  if (makeFolder && !existsSync(subfolderPath)) {
+    mkdirSync(subfolderPath);
+  }
+  return `${subfolderPath}/${id}.jpg`;
 }
+
 // Used to download a specific picture
-export async function downloadPicture(id: number) {
-  const connection = await connect();
-  const picture: pictures[] = await connection.query(
-    "SELECT * FROM pictures WHERE id=?",
-    [id],
-  );
-  await connection.query("UPDATE pictures SET downloading=1 WHERE id=?", [id]);
-  if (picture.length == 0) {
+export async function downloadPicture(id: number): Promise<void> {
+  const pictureEntry = await db
+    .selectFrom("pictures")
+    .selectAll()
+    .where("id", "=", id)
+    .executeTakeFirst();
+
+  if (!pictureEntry) {
+    console.warn(`Picture with id ${id} not found in database.`);
     return;
   }
-  if (!picture[0].downloading) {
-    if (
-      (
-        await connection.query(
-          "SELECT * FROM data WHERE value1='configDownloadPicture' AND value2='no'",
-        )
-      ).length === 0
-    ) {
-      await downloadPictureURL(picture[0].url, id);
+
+  // Set downloading flag before checking other conditions to prevent race conditions
+  // if multiple calls happen for the same picture around the same time.
+  await db
+    .updateTable("pictures")
+    .set({ downloading: 1 })
+    .where("id", "=", id)
+    .execute();
+
+  // Downloading stores if the picture has already had an attempt of downloading
+  // while downloaded stores if it exists on disk. This is to prevent repeat
+  // downloads. That value is eventually reset this is just meant as a cooldown.
+  if (!pictureEntry.downloading) {
+    const downloadDisabledConfig = await db
+      .selectFrom("data")
+      .select("value1") // Check for existence
+      .where("value1", "=", "configDownloadPicture")
+      .where("value2", "=", "no")
+      .executeTakeFirst();
+    if (downloadDisabledConfig === undefined) {
+      await downloadPictureURL(pictureEntry.url, id);
     }
   }
-  connection.end();
 }
+
 // Actually sends the request to download a picture
-async function downloadPictureURL(url: string, id: number) {
-  console.log("Downloading picture with id: " + id);
-  const fileName = Math.random().toString(36).substring(2, 15) + ".jpg";
-  await new Promise<void>(async (res, rej) => {
+async function downloadPictureURL(url: string, id: number): Promise<void> {
+  console.log(`Downloading picture with id: ${id} from ${url}`);
+  const tempFileName = `${Math.random().toString(36).substring(2, 15)}.jpg`;
+  const downloadDir = "./players/download";
+  const tempFilePath = `${downloadDir}/${tempFileName}`;
+
+  try {
     if (!existsSync("./players/")) {
-      mkdirSync("./players");
+      mkdirSync("./players/");
     }
-    if (!existsSync("./players/download")) {
-      mkdirSync("./players/download");
+    if (!existsSync(downloadDir)) {
+      mkdirSync(downloadDir);
     }
-    const stream = createWriteStream("./players/download/" + fileName);
-    const { body, status } = await fetch(url, {
+
+    const stream = createWriteStream(tempFilePath);
+    const response = await fetch(url, {
       // Why an image requires a user agent IDK, but some places do so all of them now get chrome's user agent
       headers: {
         "User-Agent":
           "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
       },
-    }).catch((e) => {
-      return { body: undefined, status: e };
     });
-    if (!body || status !== 200) {
-      rej("Status code was not 200, but: " + status);
-      return;
+
+    if (!response.ok || !response.body) {
+      throw new Error(
+        `Fetch failed with status ${response.status} for URL: ${url}`,
+      );
     }
+
     await finished(
-      Readable.fromWeb(body as ReadableStream<Uint8Array>).pipe(stream),
-    );
-    res();
-  })
-    .then(async () => {
-      const connection = await connect();
-      await connection.query("UPDATE pictures SET downloaded=1 WHERE id=?", [
-        id,
-      ]);
-      await rename("./players/download/" + fileName, picturePath(id, true));
-      console.log("Finished downloading picture with id: " + id);
-    })
-    .catch((e) =>
-      console.error(
-        "Failed to download picture with error: " + e + " and id: " + id,
+      Readable.fromWeb(response.body as ReadableStream<Uint8Array>).pipe(
+        stream,
       ),
     );
+    await rename(tempFilePath, picturePath(id, true));
+    console.log(`Finished downloading picture with id: ${id}`);
+  } catch (error) {
+    console.error(`Failed to download picture with id: ${id}. Error: ${error}`);
+  }
 }
 
 // Used to download every single picture needed
-export async function downloadAllPictures() {
+export async function downloadAllPictures(): Promise<void> {
   console.log("All pictures are being downloaded");
-  const connection = await connect();
-  const result = await connection.query(
-    "SELECT * FROM pictures WHERE downloaded=0",
+
+  const picturesToDownload: Selectable<Pictures>[] = await db
+    .selectFrom("pictures")
+    .selectAll()
+    .where("downloaded", "=", 0)
+    .execute();
+  await Promise.allSettled(
+    picturesToDownload.map((picture) =>
+      downloadPictureURL(picture.url, picture.id),
+    ),
   );
-  connection.query("UPDATE pictures SET downloading=1");
-  result.forEach((e) => {
-    downloadPictureURL(e.url, e.id);
-  });
-  connection.end();
 }
+
 /**
  * Checks the pictures in the downloaded folder, deletes all invalid files in the folder, and updates the database accordingly.
  */
-export async function checkPictures() {
-  // Deletes all files in the downloaded folder
-  if (existsSync("./players/download/")) {
-    rmSync("./players/download/", { recursive: true });
+export async function checkPictures(): Promise<void> {
+  const downloadDir = "./players/download/";
+  if (existsSync(downloadDir)) {
+    rmSync(downloadDir, { recursive: true, force: true });
   }
-  const connection = await connect();
-  await connection.query("UPDATE pictures SET downloading=downloaded");
-  if (
-    (
-      await connection.query(
-        "SELECT * FROM data WHERE value1='configDownloadPicture' AND value2='no'",
-      )
-    ).length > 0
-  ) {
-    console.log("Picture downloading is disabled");
+
+  await db
+    .updateTable("pictures")
+    .set({ downloading: (eb) => eb.ref("downloaded") })
+    .execute();
+
+  const downloadDisabledConfig = await db
+    .selectFrom("data")
+    .select("value1")
+    .where("value1", "=", "configDownloadPicture")
+    .where("value2", "=", "no")
+    .executeTakeFirst();
+
+  if (downloadDisabledConfig) {
+    console.log("Picture downloading is disabled by config.");
     return;
   }
-  const result = await connection.query(
-    "SELECT * FROM pictures WHERE downloaded=1",
-  );
-  await Promise.all(
-    result.map(
-      (e) =>
-        new Promise<void>(async (res) => {
-          if (!existsSync(picturePath(e.id))) {
-            await connection.query(
-              "UPDATE pictures SET downloaded=0, downloading=0 WHERE id=?",
-              [e.id],
-            );
-          }
-          res();
-        }),
-    ),
-  );
-  if (
-    (
-      await connection.query(
-        "SELECT * FROM data WHERE value1='configDownloadPicture' AND value2='yes'",
-      )
-    ).length > 0
-  ) {
-    downloadAllPictures();
+
+  const downloadedPictureRecords: Selectable<Pictures>[] = await db
+    .selectFrom("pictures")
+    .selectAll()
+    .where("downloaded", "=", 1)
+    .execute();
+
+  const updateDbPromises = downloadedPictureRecords.map(async (picture) => {
+    if (!existsSync(picturePath(picture.id))) {
+      // If file doesn't exist but DB says it's downloaded, mark for re-download
+      await db
+        .updateTable("pictures")
+        .set({ downloaded: 0, downloading: 0 })
+        .where("id", "=", picture.id)
+        .execute();
+    }
+  });
+  await Promise.all(updateDbPromises);
+
+  const forceDownloadAllConfig = await db
+    .selectFrom("data")
+    .select("value1")
+    .where("value1", "=", "configDownloadPicture")
+    .where("value2", "=", "yes") // Assuming 'yes' means force download all non-downloaded
+    .executeTakeFirst();
+
+  if (forceDownloadAllConfig) {
+    await downloadAllPictures();
   }
-  connection.end();
 }

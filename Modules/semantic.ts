@@ -2,7 +2,7 @@
  *
  * @param a the first version.
  * @param b the second version.
- * @returns 1 if b is newer than a, -1 if a is newer than b, 0 if they are the same.
+ * @returns -1 if b is newer than a, 1 if a is newer than b, 0 if they are the same.
  */
 export function compareSemanticVersions(a: string, b: string): 1 | -1 | 0 {
   // 1. Split the strings into their parts.

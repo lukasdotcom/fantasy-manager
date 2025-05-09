@@ -119,7 +119,9 @@ const Main: dataGetter = async function () {
         height: 140,
         width: 110,
         value: e.now_cost * 100000,
-        position: ["", "gk", "def", "mid", "att"][e.element_type] as position,
+        position:
+          (["gk", "gk", "def", "mid", "att"][e.element_type] as position) ||
+          "gk",
         forecast,
         total_points: e.total_points,
         average_points: parseFloat(e.points_per_game),

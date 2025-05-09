@@ -3,13 +3,8 @@ import Link from "../../../components/Link";
 import Dialog from "../../../components/Dialog";
 import { GetServerSideProps } from "next";
 import Head from "next/head.js";
-import connect from "../../../Modules/database";
-import {
-  forecast,
-  historicalPlayers,
-  players,
-  pictures,
-} from "#types/database";
+import db from "../../../Modules/database";
+import { Pictures, Players } from "#type/db";
 import Image from "next/image";
 import { useContext, useEffect, useState } from "react";
 import {
@@ -32,8 +27,9 @@ import { TranslateContext } from "../../../Modules/context";
 import { downloadPicture } from "#/scripts/pictures";
 import fallbackImg from "../../../public/playerFallback.png";
 import { getData } from "#/pages/api/theme";
-interface extendedPlayers extends players {
-  game: {
+import { Selectable } from "kysely";
+interface extendedPlayers extends Selectable<Players> {
+  game?: {
     opponent: string;
     gameStart: number;
   };
@@ -44,7 +40,7 @@ interface props {
   times: number[];
   league: string;
   otherLeagues: { league: string; uid: string }[];
-  pictures: pictures[];
+  pictures: Selectable<Pictures>[];
 }
 interface Column {
   id:
@@ -68,10 +64,10 @@ interface Data {
   average_points: number;
   total_points: number;
   club: string;
-  opponent: string;
+  opponent?: string;
   position: string;
   exists: boolean;
-  forecast: forecast;
+  forecast: string;
   loading: false;
 }
 export default function Home({
@@ -125,7 +121,8 @@ export default function Home({
     {
       id: "opponent",
       label: "Opponent",
-      format: (value: string | number) => String(value),
+      format: (value: string | number | undefined) =>
+        value ? String(value) : "",
     },
     { id: "club", label: "Club", format: (value: unknown) => String(value) },
     {
@@ -136,7 +133,7 @@ export default function Home({
   ];
   // Stores the amount of time left until the game starts
   const [countdown, setCountown] = useState<number>(
-    (player.game.gameStart - Date.now() / 1000) / 60,
+    (player?.game?.gameStart || 0 - Date.now() / 1000) / 60,
   );
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(5);
@@ -156,10 +153,10 @@ export default function Home({
         last_match: player.last_match,
         average_points: player.average_points,
         total_points: player.total_points,
-        opponent: player.game.opponent,
+        opponent: player?.game?.opponent,
         club: player.club,
         position: player.position,
-        exists: player.exists,
+        exists: Boolean(player.exists),
         forecast: player.forecast,
         loading: false,
       },
@@ -190,9 +187,9 @@ export default function Home({
                   average_points: data.average_points,
                   total_points: data.total_points,
                   club: data.club,
-                  opponent: data.game ? data.game.opponent : "",
+                  opponent: data.game ? (data.game.opponent ?? "") : "",
                   position: data.position,
-                  exists: data.exists,
+                  exists: Boolean(data.exists),
                   forecast: data.forecast,
                   loading: false,
                 };
@@ -305,17 +302,19 @@ export default function Home({
       <p>
         {t("Last Match")} : {player.last_match}
       </p>
-      <p>
-        {t("Opponent")} :{" "}
-        {countdown > 0
-          ? t("{team} in {day} D {hour} H {minute} M ", {
-              team: player.game.opponent,
-              day: String(Math.floor(countdown / 60 / 24)),
-              hour: String(Math.floor(countdown / 60) % 24),
-              minute: String(Math.floor(countdown) % 60),
-            })
-          : player.game.opponent}
-      </p>
+      {player.game && (
+        <p>
+          {t("Opponent")} :{" "}
+          {countdown > 0
+            ? t("{team} in {day} D {hour} H {minute} M ", {
+                team: player.game.opponent,
+                day: String(Math.floor(countdown / 60 / 24)),
+                hour: String(Math.floor(countdown / 60) % 24),
+                minute: String(Math.floor(countdown) % 60),
+              })
+            : player.game.opponent}
+        </p>
+      )}
     </div>
   );
   const Row3 = otherLeagues.length > 0 && (
@@ -441,7 +440,7 @@ export default function Home({
                         const value = row[column.id];
                         return (
                           <TableCell key={column.id}>
-                            {column.format(value)}
+                            {column.format(value as string | number)}
                           </TableCell>
                         );
                       })}
@@ -483,98 +482,104 @@ export default function Home({
 }
 
 export const getServerSideProps: GetServerSideProps = async (ctx) => {
-  const connection = await connect();
   const uid = ctx.params?.uid as string;
   const league = ctx.params?.league as string;
-  let player: extendedPlayers[] = await connection.query(
-    "SELECT * FROM players WHERE uid=? AND league=?",
-    [uid, league],
-  );
-  if (player.length == 0) {
+  let player = await db
+    .selectFrom("players")
+    .where("uid", "=", uid)
+    .where("league", "=", league)
+    .selectAll()
+    .executeTakeFirst();
+  if (player === undefined) {
     return {
       notFound: true,
     };
   }
   // Makes sure that this is not invalid data that is being shown to the user
   while (
-    player[0].exists === false &&
-    (await connection
-      .query("SELECT * FROM data WHERE value1=?", ["locked" + league])
-      .then((res) => res.length > 0))
+    player?.exists === 0 &&
+    (await db
+      .selectFrom("data")
+      .where("value1", "=", "locked" + league)
+      .executeTakeFirst()) !== undefined
   ) {
     await new Promise((res) => setTimeout(res, 1000));
-    player = await connection.query(
-      "SELECT * FROM players WHERE uid=? AND league=?",
-      [uid, league],
-    );
+    player = await db
+      .selectFrom("players")
+      .where("uid", "=", uid)
+      .where("league", "=", league)
+      .selectAll()
+      .executeTakeFirst();
   }
-  const otherLeagues = await connection
-    .query("SELECT * FROM players WHERE nameAscii=? AND league!=?", [
-      player[0].nameAscii,
-      league,
-    ])
-    .then((e: players[]) =>
-      e.map((e) => {
-        return { league: e.league, uid: e.uid };
-      }),
-    );
+  if (player === undefined) {
+    return {
+      notFound: true,
+    };
+  }
+  const otherLeagues = await db
+    .selectFrom("players")
+    .select(["league", "uid"])
+    .where("nameAscii", "=", player.nameAscii)
+    .where("league", "!=", league)
+    .execute();
   // Gets some more player data
-  const gameData = await connection
-    .query("SELECT * FROM clubs WHERE club=? AND league=?", [
-      player[0].club,
-      league,
-    ])
-    .then((res) =>
-      res.length > 0
-        ? { opponent: res[0].opponent, gameStart: res[0].gameStart }
-        : undefined,
-    );
-  if (gameData) player[0].game = gameData;
+  const gameData = await db
+    .selectFrom("clubs")
+    .select(["opponent", "gameStart"])
+    .where("club", "=", player.club)
+    .where("league", "=", league)
+    .executeTakeFirst();
   // Gets all the pictures in a set
   const pictures = new Set<number>();
-  pictures.add(player[0].pictureID);
+  pictures.add(player.pictureID);
   // Gets all the historical times in an array
-  const times = await connection
-    .query(
-      "SELECT * FROM historicalPlayers WHERE uid=? AND league=? ORDER BY time DESC",
-      [uid, league],
-    )
+  const times = await db
+    .selectFrom("historicalPlayers")
+    .select(["time", "pictureID"])
+    .where("uid", "=", uid)
+    .where("league", "=", league)
+    .orderBy("time", "desc")
+    .execute()
     .then((res) => {
       const result: number[] = [];
-      res.forEach((e: historicalPlayers) => {
+      res.forEach((e) => {
         result.push(e.time);
         pictures.add(e.pictureID);
       });
       return result;
     });
   // Sends a request to download every picture needed
-  const pictureData: pictures[] = await Promise.all(
-    Array.from(pictures).map(
-      (e) =>
-        new Promise<pictures>(async (res) => {
-          downloadPicture(e);
-          const data: pictures[] = await connection.query(
-            "SELECT * FROM pictures WHERE id=?",
-            [e],
-          );
-          if (
-            (
-              await connection.query(
-                "SELECT * FROM data WHERE value1='configDownloadPicture' AND value2='no'",
-              )
-            ).length > 0
-          ) {
-            data[0].downloaded = true;
-          }
-          res({ ...data[0], id: e });
-        }),
-    ),
-  );
-  connection.end();
+  const pictureData: Selectable<Pictures>[] = (
+    await Promise.all(
+      Array.from(pictures).map(
+        (e) =>
+          new Promise<Selectable<Pictures> | undefined>(async (res) => {
+            downloadPicture(e);
+            const data = await db
+              .selectFrom("pictures")
+              .selectAll()
+              .where("id", "=", e)
+              .executeTakeFirst();
+            if (
+              data !== undefined &&
+              (await db
+                .selectFrom("data")
+                .select("value1")
+                .where("value1", "=", "configDownloadPicture")
+                .where("value2", "=", "no")
+                .executeTakeFirst()) !== undefined
+            ) {
+              res({ ...data, downloaded: 1 });
+            }
+            res(data);
+          }),
+      ),
+    )
+  ).filter((e) => e !== undefined);
   return {
     props: {
       uid,
-      player: player[0],
+      player: { ...player, gameData },
       times,
       league,
       otherLeagues,

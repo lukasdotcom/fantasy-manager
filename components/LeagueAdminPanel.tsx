@@ -16,7 +16,7 @@ import { leagueSettings as leagueSettingsDB } from "#/types/database";
 import { useSession } from "next-auth/react";
 export interface AdminUserData {
   user: number;
-  admin: boolean;
+  admin: number;
 }
 export interface AdminPanelProps {
   league: number;
@@ -276,7 +276,7 @@ function AdminPanelAdmin({
           setUsers((e2) => {
             // Updates the value for all of the users
             e2.forEach((e3) => {
-              e3.admin = admins.includes(e3.user);
+              e3.admin = +admins.includes(e3.user);
             });
             return [...e2];
           });
@@ -370,7 +370,7 @@ function AdminPanelAdmin({
               users,
               settings: {
                 fantasyEnabled,
-                startingMoney: startingMoney * 1000000,
+                startMoney: startingMoney * 1000000,
                 transfers,
                 duplicatePlayers,
                 starredPercentage,

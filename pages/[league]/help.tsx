@@ -2,7 +2,7 @@ import Head from "next/head";
 import { createRef, useContext, useState } from "react";
 import { GetServerSideProps } from "next";
 import { TranslateContext } from "../../Modules/context";
-import connect from "../../Modules/database";
+import db from "../../Modules/database";
 import { leagueSettings } from "#types/database";
 import { Button, Icon, IconButton, Tooltip } from "@mui/material";
 import { useRouter } from "next/router";
@@ -174,23 +174,26 @@ export default function Home(props: leagueSettings) {
   );
 }
 export const getServerSideProps: GetServerSideProps = async (context) => {
-  const connection = await connect();
-  const settings: leagueSettings[] = await connection.query(
-    "SELECT * FROM leagueSettings WHERE leagueID=?",
-    [context?.params?.league],
-  );
-  if (settings.length === 0) {
+  const leagueID = parseInt(String(context?.params?.league));
+  const settings = await db
+    .selectFrom("leagueSettings")
+    .selectAll()
+    .where("leagueID", "=", leagueID)
+    .executeTakeFirst();
+  if (settings === undefined) {
     return {
       notFound: true,
     };
   }
   // Makes sure to say that the league tutorial has been looked at
-  connection.query(
-    "UPDATE leagueUsers SET tutorial=0 WHERE leagueID=? AND user=?",
-    [
-      context?.params?.league,
+  db.updateTable("leagueUsers")
+    .set("tutorial", 0)
+    .where("leagueID", "=", leagueID)
+    .where(
+      "user",
+      "=",
       (await getServerSession(context.req, context.res, authOptions))?.user.id,
-    ],
-  );
-  return { props: JSON.parse(JSON.stringify(settings[0])) };
+    )
+    .execute();
+  return { props: JSON.parse(JSON.stringify(settings)) };
 };

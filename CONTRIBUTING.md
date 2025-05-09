@@ -3,7 +3,7 @@
 - Q: Why is the cypress test failing?
 - A: If you made any major UI changes it may cause the test to fail. You may have to change the tests slightly(For help with making tests go to [How to Make Tests](#how-to-make-tests)). Otherwise there should be a video and a picture in the cypress/videos or cypress/screenshots directories. If you can not get the cypress test to pass just create a pull request, and I will look at it and get the test to pass.
 - Q: Where are the types for the database?
-- A: There is an interface for every table in the database located in the same file as the database connector.
+- A: In the types/db.ts file
 - Q: What do all the `#` in the imports mean?
 - A: The `#` is a special character that tells the typescript compiler to look in the root of the project for the file. This is used to make the imports shorter and easier to read. There are also other shortcuts like `#Modules` which is the modules folder. To see a list of all the shortcuts look at the package.json file in the root of the project.
 
@@ -15,7 +15,7 @@ I am very slowly converting this project to typescript. I am almost done now the
 
 - [ ] Run `npm run format` to format everything with prettier.
 - [ ] Run `npm run lint` and fix all errors and new warnings.
-- [ ] Made sure that all database changes have update code in startup.ts.
+- [ ] Made sure that all database changes have a migration and you ran `npm run dbtypes`.
 - [ ] Make sure to run the unit tests with `npm test`. This project uses vitest for more details look at [Vitest](#Vitest).
 - [ ] Made sure to test your changes with [cypress](#cypress) by running `npm run start:test` and in another terminal `npm run cypress` and when it is done stopping the server with ctr-c. If this fails, and you don't know why look in the [cypress section](#cypress), or just create the pull request anyway and leave this unchecked.
 - [ ] If you added any features it would be great if you tested them with cypress(Not required).
@@ -28,7 +28,8 @@ There are 2 ways to run the development enviroment [Native](#native) and [Docker
 
 ## Other Notes
 
-- All sql syntax should be written for sqlite. Note that some mysql syntax is automatically translated to sqlite.
+- When a database migration is needed at it in the migration folder using kysely syntax and run `npm run dbtypes` to
+  ensure the types are updated
 
 ## Native
 

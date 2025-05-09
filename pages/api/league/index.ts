@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from "next";
-import connect from "../../../Modules/database";
+import db from "../../../Modules/database";
 import { getServerSession } from "next-auth";
 import { authOptions } from "#/pages/api/auth/[...nextauth]";
 
@@ -9,30 +9,30 @@ export default async function handler(
 ) {
   const session = await getServerSession(req, res, authOptions);
   if (session) {
-    const connection = await connect();
     switch (req.method) {
       // Used to create a new league
       case "POST":
         // Generates the next id
-        const id = await connection
-          .query("SELECT max(leagueID) FROM leagueSettings")
-          .then((e) => (e.length > 0 ? e[0]["max(leagueID)"] + 1 : 1));
+        const id = Math.floor(Math.random() * 2 ** 35);
         // Makes sure that the id is not taken
-        const idUsed = await connection
-          .query("SELECT leagueID FROM leagueSettings WHERE leagueID=?", [id])
-          .then((res) => res.length > 0);
+        const idUsed =
+          (await db
+            .selectFrom("leagueSettings")
+            .select("leagueID")
+            .where("leagueID", "=", id)
+            .executeTakeFirst()) !== undefined;
         if (idUsed) {
           res.status(500).end("Failed to create league");
           break;
         }
         const leagueType = req.body.leagueType;
         if (
-          (
-            await connection.query(
-              "SELECT * FROM plugins WHERE name=? AND enabled=1",
-              [leagueType],
-            )
-          ).length == 0
+          (await db
+            .selectFrom("plugins")
+            .select("url")
+            .where("name", "=", leagueType)
+            .where("enabled", "=", 1)
+            .executeTakeFirst()) === undefined
         ) {
           res.status(404).end("Invalid league type given");
           break;
@@ -41,64 +41,106 @@ export default async function handler(
           res.status(500).end("Invalid league name given");
           break;
         }
-        const startMoney = parseInt(req.body["Starting Money"]);
+        const startMoney = parseInt(req.body.startMoney);
+        const settings: {
+          leagueName: string;
+          leagueID: number;
+          league: string;
+          startMoney?: number;
+        } = {
+          leagueName: req.body.name,
+          leagueID: id,
+          league: leagueType,
+        };
         if (startMoney > 0) {
-          await connection.query(
-            "INSERT INTO leagueSettings (leagueName, leagueID, startMoney, league) VALUES (?, ?, ?, ?)",
-            [req.body.name, id, startMoney, leagueType],
-          );
-        } else {
-          await connection.query(
-            "INSERT INTO leagueSettings (leagueName, leagueID, league) VALUES (?, ?, ?)",
-            [req.body.name, id, leagueType],
-          );
+          settings.startMoney = startMoney;
         }
-        // Makes sure that the id was created
-        const idCreated = await connection
-          .query("SELECT leagueID FROM leagueSettings WHERE leagueID=?", [id])
-          .then((res) => res.length > 0);
-        if (!idCreated) {
-          res.status(500).end("Failed to create league");
-          break;
-        }
-        connection.query(
-          "INSERT INTO leagueUsers (leagueID, user, points, money, formation, admin) VALUES(?, ?, 0, (SELECT startMoney FROM leagueSettings WHERE leagueId=?), '[1, 4, 4, 2]', 1)",
-          [id, session.user.id, id],
-        );
+        await db.insertInto("leagueSettings").values(settings).execute();
+        await db
+          .insertInto("leagueUsers")
+          .values({
+            leagueID: id,
+            user: session.user.id,
+            admin: 1,
+            money: await db
+              .selectFrom("leagueSettings")
+              .select("startMoney")
+              .where("leagueID", "=", id)
+              .executeTakeFirst()
+              .then((e) => (e ? e.startMoney : 0)),
+          })
+          .execute();
         // Checks if the game is in a transfer period and if yes it starts the first matchday automatically
-        const transferClosed = await connection
-          .query("SELECT value2 FROM data WHERE value1=?", [
-            "transferOpen" + leagueType,
-          ])
-          .then((res) => res[0].value2 !== "true");
+        const transferClosed =
+          (await db
+            .selectFrom("data")
+            .where("value1", "=", "transferOpen" + leagueType)
+            .where("value2", "=", "true")
+            .select("value2")
+            .executeTakeFirst()) === undefined;
         if (transferClosed) {
-          connection.query(
-            "INSERT INTO points (leagueID, user, points, fantasyPoints, predictionPoints, matchday, money) VALUES(?, ?, 0, 0, 0, 1, 0)",
-            [id, session.user.id],
-          );
+          await db
+            .insertInto("points")
+            .values({
+              leagueID: id,
+              user: session.user.id,
+              money: 0,
+              matchday: 1,
+            })
+            .execute();
         }
         res.status(200).end("Created League");
         console.log(
-          `User ${session.user.id} created league of ${id} with name ${req.body.name}`,
+          `User ${session.user.id} created league with id ${id} and name ${req.body.name}`,
         );
         break;
       case "GET": // Returns all leagues and archived leagues the user is in
         res.status(200).json({
-          leagues: await connection.query(
-            "SELECT leagueName, leagueID FROM leagueSettings WHERE archived=0 AND EXISTS (SELECT * FROM leagueUsers WHERE user=? and leagueUsers.leagueID = leagueSettings.leagueID)",
-            [session.user.id],
-          ),
-          archived: await connection.query(
-            "SELECT leagueName, leagueID FROM leagueSettings WHERE archived!=0 AND EXISTS (SELECT * FROM leagueUsers WHERE user=? and leagueUsers.leagueID = leagueSettings.leagueID) ORDER BY archived DESC",
-            [session.user.id],
-          ),
+          leagues: await db
+            .selectFrom("leagueSettings")
+            .selectAll()
+            .where((eb) => {
+              return eb
+                .exists(
+                  eb
+                    .selectFrom("leagueUsers")
+                    .select("league")
+                    .where("user", "=", session.user.id)
+                    .whereRef(
+                      "leagueSettings.leagueID",
+                      "=",
+                      "leagueUsers.leagueID",
+                    ),
+                )
+                .and(eb("archived", "=", 0));
+            })
+            .execute(),
+          archived: await db
+            .selectFrom("leagueSettings")
+            .selectAll()
+            .where((eb) => {
+              return eb
+                .exists(
+                  eb
+                    .selectFrom("leagueUsers")
+                    .select("league")
+                    .where("user", "=", session.user.id)
+                    .whereRef(
+                      "leagueSettings.leagueID",
+                      "=",
+                      "leagueUsers.leagueID",
+                    ),
+                )
+                .and(eb("archived", "!=", 0));
+            })
+            .orderBy("archived", "desc")
+            .execute(),
         });
         break;
       default:
         res.status(405).end(`Method ${req.method} Not Allowed`);
         break;
     }
-    connection.end();
   } else {
     res.status(401).end("Not logged in");
   }

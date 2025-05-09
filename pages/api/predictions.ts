@@ -1,8 +1,7 @@
 import { NextApiRequest, NextApiResponse } from "next";
 import { getServerSession } from "next-auth";
 import { authOptions } from "#/pages/api/auth/[...nextauth]";
-import connect from "#/Modules/database";
-import { leagueSettings } from "#/types/database";
+import db from "#/Modules/database";
 
 export default async function handler(
   req: NextApiRequest,
@@ -26,85 +25,82 @@ export default async function handler(
     return;
   }
   const id = user.user.id;
-  const connection = await connect();
   if (
-    (
-      await connection.query(
-        "SELECT * FROM leagueUsers WHERE user=? AND leagueID=?",
-        [id, body.league],
-      )
-    ).length === 0
+    (await db
+      .selectFrom("leagueUsers")
+      .selectAll()
+      .where("user", "=", id)
+      .where("leagueID", "=", body.league)
+      .executeTakeFirst()) === undefined
   ) {
-    connection.end();
     res.status(403).end("You are not in this league. ");
     return;
   }
-  const data: leagueSettings[] = await connection.query(
-    "SELECT * FROM leagueSettings WHERE leagueID=? AND predictionsEnabled=1",
-    [body.league],
-  );
-  if (data.length === 0) {
-    connection.end();
+  const leagueSettings = await db
+    .selectFrom("leagueSettings")
+    .selectAll()
+    .where("leagueID", "=", body.league)
+    .where("predictionsEnabled", "=", 1)
+    .executeTakeFirst();
+  if (leagueSettings === undefined) {
     res.status(403).end("This league does not have predictions enabled. ");
     return;
   }
-  const leagueType = data[0].league;
+  const leagueType = leagueSettings.league;
+  const data = {
+    leagueID: body.league,
+    user: id,
+    club: body.home_team,
+    league: leagueType,
+    home: body.home,
+    away: body.away,
+  };
+  // Checks if the game doesn't exist in current games
   if (
-    await connection
-      .query(
-        "SELECT * FROM clubs WHERE club=? AND league=? AND gameStart>? AND opponent=?",
-        [body.home_team, leagueType, Date.now() / 1000, body.away_team],
-      )
-      .then((res) => res.length === 0)
+    (await db
+      .selectFrom("clubs")
+      .selectAll()
+      .where("club", "=", body.home_team)
+      .where("league", "=", leagueType)
+      .where("gameStart", ">", Date.now() / 1000)
+      .where("opponent", "=", body.away_team)
+      .executeTakeFirst()) === undefined
   ) {
-    // Check if this is a future game
+    // Check if this is a valid future game
     if (
-      await connection
-        .query(
-          "SELECT * FROM futureClubs WHERE club=? AND league=? AND gameStart=? AND opponent=?",
-          [body.home_team, leagueType, body.gameStart, body.away_team],
-        )
-        .then((res) => res.length === 0)
+      (await db
+        .selectFrom("futureClubs")
+        .select("club")
+        .where("club", "=", body.home_team)
+        .where("league", "=", leagueType)
+        .where("gameStart", "=", body.gameStart)
+        .where("opponent", "=", body.away_team)
+        .executeTakeFirst()) === undefined
     ) {
-      connection.end();
       res.status(400).end("Invalid match");
       return;
     }
-    await connection.query(
-      "INSERT INTO futurePredictions (leagueID, user, club, league, gameStart, home, away) VALUES (?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE home=?, away=?",
-      [
-        body.league,
-        id,
-        body.home_team,
-        leagueType,
-        body.gameStart,
-        body.home,
-        body.away,
-        body.home,
-        body.away,
-      ],
-    );
+    await db
+      .insertInto("futurePredictions")
+      .values({ ...data, gameStart: body.gameStart })
+      .onConflict((e) =>
+        e.doUpdateSet({
+          home: data.home,
+          away: data.away,
+        }),
+      )
+      .execute();
     console.log(
       `User ${id} predicted for match ${body.home_team}-${body.away_team} in future time ${body.gameStart} the score of ${body.home}-${body.away} in league ${body.league}`,
     );
-    connection.end();
     res.status(200).end("Saved");
     return;
   }
-  await connection.query(
-    "INSERT INTO predictions (leagueID, user, club, league, home, away) VALUES (?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE home=?, away=?",
-    [
-      body.league,
-      id,
-      body.home_team,
-      leagueType,
-      body.home,
-      body.away,
-      body.home,
-      body.away,
-    ],
-  );
-  connection.end();
+  await db
+    .insertInto("predictions")
+    .values(data)
+    .onConflict((e) => e.doUpdateSet({ home: data.home, away: data.away }))
+    .execute();
   console.log(
     `User ${id} predicted for match ${body.home_team}-${body.away_team} the score of ${body.home}-${body.away} in league ${body.league}`,
   );

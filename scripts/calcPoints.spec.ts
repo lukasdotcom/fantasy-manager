@@ -1,4 +1,4 @@
-import connect from "../Modules/database";
+import db from "../Modules/database";
 import {
   calcHistoricalPredictionPoints,
   calcPredicitionPointsRaw,
@@ -6,23 +6,17 @@ import {
   calcStarredPoints,
   predictions_raw,
 } from "./calcPoints";
-import {
-  leagueSettings,
-  leagueUsers,
-  points,
-  predictions,
-} from "../types/database";
 import { describe } from "@jest/globals";
+import { Selectable } from "kysely";
+import { LeagueUsers, LeagueSettings, Points } from "../types/db";
 
 describe("calcStarredPoints", () => {
   beforeEach(async () => {
-    const connection = await connect();
-    await connection.query("DELETE FROM players");
-    await connection.query("DELETE FROM squad");
-    connection.end();
+    await db.deleteFrom("players").execute();
+    await db.deleteFrom("squad").execute();
   });
   it("no players", async () => {
-    const user: leagueUsers = {
+    const user: Selectable<LeagueUsers> = {
       user: 1,
       leagueID: 1,
       points: 0,
@@ -30,8 +24,8 @@ describe("calcStarredPoints", () => {
       formation: "{}",
       fantasyPoints: 0,
       predictionPoints: 0,
-      admin: false,
-      tutorial: false,
+      admin: 0,
+      tutorial: 0,
     };
     expect(process.env["APP_ENV"]).toBe("test");
     expect(await calcStarredPoints(user)).toBe(0);
@@ -40,48 +34,63 @@ describe("calcStarredPoints", () => {
 
 describe("calcPredictionsPointsNow", () => {
   beforeEach(async () => {
-    const connection = await connect();
-    await connection.query("DELETE FROM predictions");
-    await connection.query("DELETE FROM leagueSettings");
-    connection.end();
+    await db.deleteFrom("predictions").execute();
+    await db.deleteFrom("leagueSettings").execute();
+    await db.deleteFrom("leagueUsers").execute();
   });
   it("no predictions with null", async () => {
-    const connection = await connect();
-    await connection.query(
-      "INSERT INTO predictions (leagueID, user, club, league, home, away) VALUES (1, 1, 'test', 'league', NULL, NULL)",
-    );
-    await connection.query("INSERT INTO leagueSettings (leagueID) VALUES (1)");
-    await connection.query(
-      "INSERT INTO leagueUsers (user, leagueID) VALUES (1, 1)",
-    );
-    await connection.query(
-      "INSERT INTO predictions (leagueID, user, club, league, home, away) VALUES (1, 1, 'test2', 'league', 1, NULL)",
-    );
-    const user: leagueUsers = {
-      user: 1,
-      leagueID: 1,
-      points: 0,
-      money: 0,
-      formation: "{}",
-      fantasyPoints: 0,
-      predictionPoints: 0,
-      admin: false,
-      tutorial: false,
-    };
-    await calcPredictionsPointsNow(user);
-    const prediction_list: predictions[] = await connection.query(
-      "SELECT * FROM predictions WHERE leagueID=1 AND user=1",
-    );
+    await db
+      .insertInto("predictions")
+      .values({
+        leagueID: 1,
+        user: 1,
+        club: "test",
+        league: "league",
+      })
+      .execute();
+    await db
+      .insertInto("leagueSettings")
+      .values({ leagueID: 1, leagueName: "", league: "league" })
+      .execute();
+    await db
+      .insertInto("leagueUsers")
+      .values({ user: 1, leagueID: 1, money: 0 })
+      .execute();
+    await db
+      .insertInto("predictions")
+      .values({
+        leagueID: 1,
+        user: 1,
+        club: "test2",
+        league: "league",
+        home: 1,
+      })
+      .execute();
+    const user = await db
+      .selectFrom("leagueUsers")
+      .where("user", "=", 1)
+      .where("leagueID", "=", 1)
+      .selectAll()
+      .executeTakeFirst();
+    expect(user).toBeDefined();
+    if (user !== undefined) {
+      await calcPredictionsPointsNow(user);
+    }
+    const prediction_list = await db
+      .selectFrom("predictions")
+      .where("leagueID", "=", 1)
+      .where("user", "=", 1)
+      .selectAll()
+      .execute();
     for (let i = 0; i < prediction_list.length; i++) {
       expect(prediction_list[i].home).not.toBeNull();
       expect(prediction_list[i].away).not.toBeNull();
     }
-    connection.end();
   });
 });
 
 describe("calcPredictionsPoints", () => {
-  const defaultleagueSettings: leagueSettings = {
+  const defaultleagueSettings: Selectable<LeagueSettings> = {
     leagueID: 1,
     leagueName: "test",
     archived: 0,
@@ -89,12 +98,12 @@ describe("calcPredictionsPoints", () => {
     transfers: 0,
     duplicatePlayers: 0,
     starredPercentage: 0,
-    matchdayTransfers: false,
-    fantasyEnabled: false,
-    predictionsEnabled: true,
-    top11: false,
-    active: true,
-    inActiveDays: 0,
+    matchdayTransfers: 0,
+    fantasyEnabled: 0,
+    predictionsEnabled: 1,
+    top11: 0,
+    inactiveDays: 0,
+    active: 1,
     league: "league",
     predictExact: 5,
     predictDifference: 3,
@@ -121,7 +130,7 @@ describe("calcPredictionsPoints", () => {
 });
 
 describe("calcHistoricalPredictionPoints", () => {
-  const point_data: points = {
+  const point_data: Selectable<Points> = {
     leagueID: 1,
     user: 1,
     points: 0,
@@ -132,33 +141,52 @@ describe("calcHistoricalPredictionPoints", () => {
     money: 0,
   };
   beforeEach(async () => {
-    const connection = await connect();
-    await connection.query("DELETE FROM leagueSettings");
-    await connection.query("DELETE FROM historicalClubs");
-    await connection.query(
-      "INSERT INTO leagueSettings (leagueID, predictExact, league) VALUES (1, 10, 'league')",
-    );
-    await connection.query(
-      "INSERT INTO historicalClubs (home, time, teamScore, opponentScore, club, league) VALUES (1, 1, 1, 1, 'test', 'league')",
-    );
-    await connection.query(
-      "INSERT INTO leagueUsers (user, leagueID) VALUES (1, 1)",
-    );
-    connection.end();
+    await db.deleteFrom("leagueSettings").execute();
+    await db.deleteFrom("historicalClubs").execute();
+    await db.deleteFrom("historicalPredictions").execute();
+    await db.deleteFrom("leagueUsers").execute();
+    await db
+      .insertInto("leagueSettings")
+      .values({
+        leagueID: 1,
+        predictExact: 10,
+        league: "league",
+        leagueName: "test",
+      })
+      .execute();
+    await db
+      .insertInto("historicalClubs")
+      .values({
+        home: 1,
+        time: 1,
+        teamScore: 1,
+        opponentScore: 1,
+        gameStart: 0,
+        club: "test",
+        league: "league",
+      })
+      .execute();
+    await db
+      .insertInto("leagueUsers")
+      .values({ user: 1, leagueID: 1, money: 0 })
+      .execute();
   });
   it("no prediction", async () => {
-    const connection = await connect();
-    await connection.query("DELETE FROM historicalPredictions");
     expect(await calcHistoricalPredictionPoints(point_data)).toBe(0);
-    connection.end();
   });
   it("one prediction", async () => {
-    const connection = await connect();
-    await connection.query("DELETE FROM historicalPredictions");
-    await connection.query(
-      "INSERT INTO historicalPredictions (user, leagueID, matchday, home, away, club) VALUES (1, 1, 1, 1, 1, 'test')",
-    );
+    await db
+      .insertInto("historicalPredictions")
+      .values({
+        user: 1,
+        leagueID: 1,
+        matchday: 1,
+        home: 1,
+        away: 1,
+        club: "test",
+        league: "league",
+      })
+      .execute();
     expect(await calcHistoricalPredictionPoints(point_data)).toBe(10);
-    connection.end();
   });
 });

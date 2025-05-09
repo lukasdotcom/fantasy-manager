@@ -1,4 +1,4 @@
-import connect from "#database";
+import db from "#database";
 import { NextApiRequest, NextApiResponse } from "next";
 import { getServerSession } from "next-auth";
 import { authOptions } from "#/pages/api/auth/[...nextauth]";
@@ -19,12 +19,14 @@ export default async function handler(
   }
   switch (req.method) {
     case "GET":
+      const day = parseInt(String(req.query.day));
       // Gets analytics data
-      const connection = await connect();
-      const result = await connection.query(
-        "SELECT * FROM analytics WHERE day>=? AND day<?+50",
-        [req.query.day, req.query.day],
-      );
+      const result = await db
+        .selectFrom("analytics")
+        .selectAll()
+        .where("day", ">=", day)
+        .where("day", "<", day + 50)
+        .execute();
       if (
         process.env.APP_ENV !== "development" &&
         process.env.APP_ENV !== "test"

@@ -1,4 +1,4 @@
-import connect from "../../../../Modules/database";
+import db from "../../../../Modules/database";
 import { authOptions } from "#/pages/api/auth/[...nextauth]";
 import { getServerSession } from "next-auth";
 import { NextApiRequest, NextApiResponse } from "next";
@@ -11,78 +11,85 @@ export default async function handler(
 ) {
   const session = await getServerSession(req, res, authOptions);
   if (session) {
-    const connection = await connect();
     const league = parseInt(req.query.league as string);
     // Variable to check if the league is archived
-    const isArchived = connection
-      .query("SELECT * FROM leagueSettings WHERE leagueID=? AND archived=0", [
-        league,
-      ])
-      .then((e) => e.length === 0);
+    const isArchived =
+      (await db
+        .selectFrom("leagueSettings")
+        .select("active")
+        .where("leagueID", "=", league)
+        .where("archived", "=", 0)
+        .executeTakeFirst()) === undefined;
     switch (req.method) {
       // Used to edit a league
       case "POST":
-        if (await isArchived) {
+        if (isArchived) {
           res.status(400).end("This league is archived");
           break;
         }
         // Checks if the user is qualified to do this
         if (
-          (
-            await connection.query(
-              "SELECT * FROM leagueUsers WHERE leagueID=? AND user=? AND admin=1",
-              [league, session.user.id],
-            )
-          ).length > 0
+          (await db
+            .selectFrom("leagueUsers")
+            .select("admin")
+            .where("leagueID", "=", league)
+            .where("user", "=", session.user.id)
+            .where("admin", "=", 1)
+            .executeTakeFirst()) !== undefined
         ) {
           if (Array.isArray(req.body.users)) {
             // Updates all the users from admin to not admin
-            req.body.users.forEach((e: { user: number; admin: boolean }) => {
-              connection.query(
-                "UPDATE leagueUsers SET admin=? WHERE leagueID=? and user=?",
-                [e.admin, league, e.user],
-              );
-            });
+            await Promise.all(
+              req.body.users.map((e: { user: number; admin: boolean }) =>
+                db
+                  .updateTable("leagueUsers")
+                  .set({ admin: +e.admin })
+                  .where("leagueID", "=", league)
+                  .where("user", "=", e.user)
+                  .execute(),
+              ),
+            );
           }
           if (req.body.settings !== undefined) {
-            const settings = req.body.settings;
-            if (parseInt(settings.startingMoney) < 10000) {
+            const settings = {
+              leagueName: req.body.settings.leagueName,
+              startMoney: parseInt(req.body.settings.startMoney),
+              transfers: parseInt(req.body.settings.transfers),
+              duplicatePlayers: parseInt(req.body.settings.duplicatePlayers),
+              starredPercentage: parseInt(req.body.settings.starredPercentage),
+              matchdayTransfers: +Boolean(req.body.settings.matchdayTransfers),
+              fantasyEnabled: +Boolean(req.body.settings.fantasyEnabled),
+              predictionsEnabled: +Boolean(
+                req.body.settings.predictionsEnabled,
+              ),
+              predictWinner: parseInt(req.body.settings.predictWinner),
+              predictDifference: parseInt(req.body.settings.predictDifference),
+              predictExact: parseInt(req.body.settings.predictExact),
+            };
+            if (settings.startMoney < 10000) {
               res.status(400).end("Starting money too low");
-            } else if (parseInt(settings.transfers) <= 0) {
+            } else if (settings.transfers <= 0) {
               res.status(400).end("At least one transfer must be allowed");
-            } else if (parseInt(settings.duplicatePlayers) <= 0) {
+            } else if (settings.duplicatePlayers <= 0) {
               res.status(400).end("Duplicate Players must be greater than 0");
-            } else if (parseInt(settings.starredPercentage) < 100) {
+            } else if (settings.starredPercentage < 100) {
               res.status(400).end("Star bonus can not be less than 100%");
-            } else if (isNaN(parseInt(settings.predictWinner))) {
+            } else if (isNaN(settings.predictWinner)) {
               res.status(400).end("Predict winner must be a number");
-            } else if (isNaN(parseInt(settings.predictDifference))) {
+            } else if (isNaN(settings.predictDifference)) {
               res.status(400).end("Predict difference must be a number");
-            } else if (isNaN(parseInt(settings.predictExact))) {
+            } else if (isNaN(settings.predictExact)) {
               res.status(400).end("Predict exact must be a number");
             } else {
-              connection.query(
-                "UPDATE leagueSettings SET leagueName=?, startMoney=?, transfers=?, duplicatePlayers=?, starredPercentage=?, matchdayTransfers=?, fantasyEnabled=?, predictionsEnabled=?, predictWinner=?, predictDifference=?, predictExact=?, top11=? WHERE leagueID=?",
-                [
-                  String(settings.leagueName),
-                  parseInt(settings.startingMoney),
-                  parseInt(settings.transfers),
-                  parseInt(settings.duplicatePlayers),
-                  parseInt(settings.starredPercentage),
-                  Boolean(settings.matchdayTransfers),
-                  Boolean(settings.fantasyEnabled),
-                  Boolean(settings.predictionsEnabled),
-                  parseInt(settings.predictWinner),
-                  parseInt(settings.predictDifference),
-                  parseInt(settings.predictExact),
-                  Boolean(settings.top11),
-                  league,
-                ],
-              );
+              await db
+                .updateTable("leagueSettings")
+                .set(settings)
+                .where("leagueID", "=", league)
+                .execute();
               // Archives the league when told to do so
-              if (settings.archive === true) {
+              if (req.body.settings.archive === true) {
                 console.log(`League ${league} was archived`);
-                archive_league(league);
+                await archive_league(league);
               }
               res.status(200).end("Saved settings");
             }
@@ -100,7 +107,6 @@ export default async function handler(
         res.status(405).end(`Method ${req.method} Not Allowed`);
         break;
     }
-    connection.end();
   } else {
     res.status(401).end("Not logged in");
   }
