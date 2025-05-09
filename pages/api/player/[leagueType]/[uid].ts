@@ -1,93 +1,81 @@
 import { NextApiRequest, NextApiResponse } from "next";
 import { cache } from "../../../../Modules/cache";
-import connect from "../../../../Modules/database";
-import { forecast, historicalPlayers, players } from "#types/database";
+import db from "../../../../Modules/database";
 import { checkUpdate } from "../../../../scripts/checkUpdate";
 import { downloadPicture } from "#/scripts/pictures";
+import { Selectable } from "kysely";
+import { HistoricalPlayers, Players } from "#type/db";
+import { whileLocked } from "#Modules/locked";
 // Used to return a dictionary on the data for a player
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse<result>,
 ) {
   if (req.method == "GET") {
-    const connection = await connect();
     const league = String(req.query.leagueType);
+    const playeruid = String(req.query.uid);
     const time = parseInt(String(req.query.time));
-    const returnValue: result[] = [];
+    let returnValue: result | undefined = undefined;
     // Checks if new data needs to be requested
     await checkUpdate(league);
     if (time > 0) {
-      const answer: historicalPlayers[] = await connection.query(
-        "SELECT * FROM historicalPlayers WHERE uid=? AND time=? AND league=?",
-        [req.query.uid, time, league],
-      );
-      if (answer.length > 0) {
+      const answer = await db
+        .selectFrom("historicalPlayers")
+        .selectAll()
+        .where("uid", "=", String(req.query.uid))
+        .where("time", "=", time)
+        .where("league", "=", league)
+        .executeTakeFirst();
+      if (answer !== undefined) {
         // Gets the game data
-        const game: gameData | undefined = await connection
-          .query(
-            "SELECT * FROM historicalClubs WHERE club=? AND time=? AND league=?",
-            [answer[0].club, time, league],
-          )
-          .then((res) =>
-            res.length > 0 ? { opponent: res[0].opponent } : undefined,
-          );
-        returnValue.push({
-          ...answer[0],
+        const game = await db
+          .selectFrom("historicalClubs")
+          .select(["opponent", "gameStart"])
+          .where("club", "=", answer.club)
+          .where("time", "=", time)
+          .where("league", "=", league)
+          .executeTakeFirst();
+        returnValue = {
+          ...answer,
           updateRunning: true,
-          game,
-        });
+          game: game,
+        };
       }
     } else {
-      let answer: players[] = await connection.query(
-        `SELECT * FROM players WHERE uid=? AND league=? LIMIT 1`,
-        [req.query.uid, league],
-      );
+      await whileLocked(league);
+      const result = await db
+        .selectFrom("players")
+        .selectAll()
+        .where("uid", "=", playeruid)
+        .where("league", "=", league)
+        .executeTakeFirst();
       // Adds the game information
-      if (answer.length > 0) {
-        // Makes sure that the player data is up to date
-        while (
-          !answer[0].exists &&
-          (await connection
-            .query("SELECT * FROM data WHERE value1=?", ["locked" + league])
-            .then((res) => res.length > 0))
-        ) {
-          answer = await connection.query(
-            `SELECT * FROM players WHERE uid=? AND league=? LIMIT 1`,
-            [req.query.uid, league],
-          );
-          await new Promise((resolve) => setTimeout(resolve, 1000));
-        }
-        const result = answer[0];
+      if (result !== undefined) {
         // Finds the historical game that may exist on that day
-        const game: gameData | undefined = await connection
-          .query("SELECT * FROM clubs WHERE club=? AND league=?", [
-            answer[0].club,
-            league,
-          ])
-          .then((res) =>
-            res.length > 0
-              ? {
-                  opponent: res[0].opponent,
-                  gameStart: res[0].gameStart,
-                  gameEnd: res[0].gameEnd,
-                }
-              : undefined,
-          );
-        returnValue.push({ ...result, updateRunning: true, game });
+        const game = await db
+          .selectFrom("clubs")
+          .where("club", "=", result.club)
+          .where("league", "=", league)
+          .select(["opponent", "gameStart", "gameEnd"])
+          .executeTakeFirst();
+        returnValue = { ...result, updateRunning: true, game };
       }
     }
     // Tells the user if the updates are still running
-    if (returnValue.length > 0 && time > 0) {
-      returnValue[0].updateRunning = await connection
-        .query("SELECT value2 FROM data WHERE value1='lastUpdateCheck'")
-        .then((result) =>
-          result.length > 0
-            ? Date.now() / 1000 - 600 < result[0].value2
+    if (returnValue !== undefined) {
+      returnValue.updateRunning = await db
+        .selectFrom("data")
+        .where("value1", "=", "lastUpdateCheck")
+        .selectAll()
+        .executeTakeFirst()
+        .then((e) =>
+          e !== undefined
+            ? Date.now() / 1000 - 600 < parseInt(e.value2)
             : false,
         );
     }
     // Checks if the player exists
-    if (returnValue.length > 0) {
+    if (returnValue !== undefined) {
       // Tells the browser how long to cache if not a development
       if (
         process.env.APP_ENV !== "development" &&
@@ -98,46 +86,47 @@ export default async function handler(
           `public, max-age=${time > 0 ? 604800 : await cache(league)}`,
         );
       }
-      const picture = await connection.query(
-        "SELECT * FROM pictures WHERE id=?",
-        [returnValue[0].pictureID],
-      );
-      downloadPicture(returnValue[0].pictureID);
-      const returnData = {
-        ...returnValue[0],
-        height: picture[0].height,
-        width: picture[0].width,
+      const picture = await db
+        .selectFrom("pictures")
+        .selectAll()
+        .where("id", "=", returnValue.pictureID)
+        .executeTakeFirst();
+      downloadPicture(returnValue.pictureID);
+      const returnData: result = {
+        ...returnValue,
+        height: picture?.height,
+        width: picture?.width,
         downloaded:
-          (
-            await connection.query(
-              "SELECT * FROM data WHERE value1='configDownloadPicture' AND value2='no'",
-            )
-          ).length > 0
+          (await db
+            .selectFrom("data")
+            .where("value1", "=", "configDownloadPicture")
+            .where("value2", "=", "no")
+            .selectAll()
+            .executeTakeFirst()) !== undefined
             ? true
-            : picture[0].downloaded,
+            : Boolean(picture?.downloaded),
       };
       res.status(200).json(returnData);
     } else {
       res.status(404).end("Player not found");
     }
-    connection.end();
   } else {
     res.status(405).end(`Method ${req.method} Not Allowed`);
   }
 }
 
 type gameData = {
-  opponent: string;
+  opponent: string | null;
   gameStart?: number;
   gameEnd?: number;
 };
 
 // This is the type returned by this API
-export type result = (players | historicalPlayers) & {
-  forecast: forecast;
+export type result = (Selectable<Players> | Selectable<HistoricalPlayers>) & {
+  forecast: string;
   game?: gameData;
   updateRunning: boolean;
-  pictureHeight?: number;
-  pictureWidth?: number;
+  height?: number;
+  width?: number;
   downloaded?: boolean;
 };

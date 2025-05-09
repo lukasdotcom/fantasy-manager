@@ -1,4 +1,4 @@
-import connect from "#database";
+import db from "#database";
 import { updateData } from "#scripts/update";
 
 run();
@@ -6,11 +6,10 @@ run();
 async function run() {
   // Starts the matchday
   await updateData("", "./sample/data2.json");
-  const connection = await connect();
-  await connection.query("UPDATE clubs SET gameStart=?", [
-    Math.floor(Date.now() / 1000 - 200),
-  ]);
-  connection.end();
+  await db
+    .updateTable("clubs")
+    .set({ gameStart: Math.floor(Date.now() / 1000 - 200) })
+    .execute();
   // Simulates all the games
   await updateData("", "./sample/data3.json");
 }

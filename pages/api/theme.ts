@@ -1,4 +1,4 @@
-import connect from "#/Modules/database";
+import db from "#/Modules/database";
 import getLocales from "#/locales/getLocales";
 import { ThemeOptions } from "@mui/material";
 import {
@@ -23,7 +23,6 @@ export const getTheme = async (): Promise<{
   dark: ThemeOptions;
   light: ThemeOptions;
 }> => {
-  const connection = await connect();
   const theme: { dark: ThemeOptions; light: ThemeOptions } = {
     dark: {
       palette: {
@@ -37,22 +36,27 @@ export const getTheme = async (): Promise<{
     },
   };
   try {
-    theme.dark = await connection
-      .query("SELECT * FROM data WHERE value1='configThemeDark'")
+    theme.dark = await db
+      .selectFrom("data")
+      .select("value2")
+      .where("value1", "=", "configThemeDark")
+      .execute()
       .then((res) => (res.length > 0 ? JSON.parse(res[0].value2) : theme.dark));
   } catch {
     console.error("Failed to parse dark theme");
   }
   try {
-    theme.light = await connection
-      .query("SELECT * FROM data WHERE value1='configThemeLight'")
+    theme.light = await db
+      .selectFrom("data")
+      .select("value2")
+      .where("value1", "=", "configThemeLight")
+      .execute()
       .then((res) =>
         res.length > 0 ? JSON.parse(res[0].value2) : theme.light,
       );
   } catch {
     console.error("Failed to parse light theme");
   }
-  connection.end();
   return theme;
 };
 

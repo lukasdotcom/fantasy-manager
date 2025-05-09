@@ -26,7 +26,7 @@ import {
 } from "next";
 import { getServerSession } from "next-auth";
 import { authOptions } from "#/pages/api/auth/[...nextauth]";
-import connect from "#/Modules/database";
+import db from "#/Modules/database";
 import { getData } from "./api/theme";
 interface MakeLeagueProps {
   getLeagueData: () => Promise<void>;
@@ -107,7 +107,7 @@ function MakeLeague({ getLeagueData, leagues }: MakeLeagueProps) {
             },
             body: JSON.stringify({
               name: leagueName,
-              "Starting Money": startingMoney * 1000000,
+              startMoney: startingMoney * 1000000,
               leagueType,
             }),
           });
@@ -379,11 +379,12 @@ export const getServerSideProps: GetServerSideProps = async (
   ctx: GetServerSidePropsContext,
 ) => {
   const session = await getServerSession(ctx.req, ctx.res, authOptions);
-  const connection = await connect();
-  const leagues = await connection
-    .query("SELECT * FROM plugins WHERE enabled=1")
+  const leagues = await db
+    .selectFrom("plugins")
+    .select("name")
+    .where("enabled", "=", 1)
+    .execute()
     .then((e) => e.map((e) => e.name));
-  connection.end();
   if (session) {
     return {
       props: {

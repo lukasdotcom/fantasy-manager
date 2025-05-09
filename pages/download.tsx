@@ -14,7 +14,7 @@ import { useContext, useState } from "react";
 import Menu from "../components/Menu";
 import { GetStaticProps } from "next";
 import { TranslateContext } from "../Modules/context";
-import connect from "#/Modules/database";
+import db from "#/Modules/database";
 import { useRouter } from "next/router";
 import { getData } from "./api/theme";
 type historicalTimes = { [Key: string]: number[] };
@@ -120,30 +120,33 @@ export default function Home({
   );
 }
 export const getStaticProps: GetStaticProps = async (context) => {
-  const connection = await connect();
   // Gets a list of all the times stored by each league
   const historicalTimes: historicalTimes = {};
-  const leagueTypes: string[] = (
-    await connection.query("SELECT DISTINCT league FROM players")
-  ).map((e) => e.league);
+  const leagueTypes = await db
+    .selectFrom("players")
+    .select("league")
+    .distinct()
+    .execute()
+    .then((e) => e.map((e) => e.league));
   const league_enabled: { [Key: string]: boolean } = {};
   await Promise.all(
     leagueTypes.map(
       (league) =>
         new Promise<void>(async (res) => {
-          await connection
-            .query(
-              "SELECT DISTINCT time FROM historicalPlayers WHERE league=?",
-              [league],
-            )
-            .then((e) => {
-              historicalTimes[league] = e.map((e: { time: number }) => e.time);
-            });
-          await connection
-            .query("SELECT * FROM plugins WHERE name=? AND enabled=1", [league])
-            .then((e) => {
-              league_enabled[league] = e.length > 0;
-            });
+          const times = await db
+            .selectFrom("historicalPlayers")
+            .select("time")
+            .distinct()
+            .where("league", "=", league)
+            .execute();
+          historicalTimes[league] = times.map((e) => e.time);
+          league_enabled[league] =
+            (await db
+              .selectFrom("plugins")
+              .select("name")
+              .where("name", "=", league)
+              .where("enabled", "=", 1)
+              .executeTakeFirst()) !== undefined;
           res();
         }),
     ),

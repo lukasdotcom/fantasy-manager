@@ -25,7 +25,7 @@ import {
   UserContext,
 } from "../Modules/context";
 import { getProviders, Providers } from "../types/providers";
-import connect from "../Modules/database";
+import db from "../Modules/database";
 import { useRouter } from "next/router";
 import { authOptions } from "#/pages/api/auth/[...nextauth]";
 import { MUIThemeCodetoJSONString } from "#/components/theme";
@@ -348,18 +348,20 @@ export const getServerSideProps: GetServerSideProps = async (
 ) => {
   const session = await getServerSession(ctx.req, ctx.res, authOptions);
   if (session) {
-    const connection = await connect();
     const user = session.user;
     // Checks if the user is in any leagues
-    const anyLeagues = connection
-      .query("SELECT * FROM leagueUsers WHERE user=? LIMIT 1", [user.id])
-      .then((e) => e.length > 0);
+    const anyLeagues =
+      (await db
+        .selectFrom("leagueUsers")
+        .select("user")
+        .where("user", "=", user.id)
+        .executeTakeFirst()) !== undefined;
     // Checks what providers are supported
     return {
       props: {
         user,
         providers: getProviders(),
-        deleteable: !(await anyLeagues),
+        deleteable: !anyLeagues,
         t: await getData(ctx),
       },
     };

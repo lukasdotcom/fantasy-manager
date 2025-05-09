@@ -1,7 +1,6 @@
 // This is very similar to https://github.com/tyxla/remove-accents/blob/master/index.js but with less characters to improve performance
 // Use the following sql query to find missing accents in the database: SELECT * FROM players WHERE nameAscii REGEXP '[^ -~]';
-import { historicalPlayers, players } from "#/types/database";
-import connect from "./database";
+import db from "./database";
 
 // List of characters to change
 const characterMap: Record<string, string> = {
@@ -85,39 +84,42 @@ export async function normalize_db() {
   console.log(
     "Renormalizing all player names to ascii due to updated definitions.",
   );
-  const connection = await connect();
-  const unique_players = await connection.query(
-    "SELECT DISTINCT name, nameAscii FROM players",
-  );
+  const unique_players = await db
+    .selectFrom("players")
+    .select(["name", "nameAscii"])
+    .distinct()
+    .execute();
   for (const player of unique_players) {
     const no_accents = noAccents(player.name);
     if (no_accents == player.nameAscii) continue;
-    await connection.query("UPDATE players SET nameAscii=? WHERE name=?", [
-      no_accents,
-      player.name,
-    ]);
+    await db
+      .updateTable("players")
+      .set("nameAscii", no_accents)
+      .where("name", "=", player.name)
+      .execute();
   }
-  const unique_historical_players = await connection.query(
-    "SELECT DISTINCT name, nameAscii FROM historicalPlayers",
-  );
+  const unique_historical_players = await db
+    .selectFrom("historicalPlayers")
+    .select(["name", "nameAscii"])
+    .distinct()
+    .execute();
   for (const player of unique_historical_players) {
     const no_accents = noAccents(player.name);
     if (no_accents == player.nameAscii) continue;
-    await connection.query(
-      "UPDATE historicalPlayers SET nameAscii=? WHERE name=?",
-      [no_accents, player.name],
-    );
+    await db
+      .updateTable("historicalPlayers")
+      .set("nameAscii", no_accents)
+      .where("name", "=", player.name)
+      .execute();
   }
   console.log("Done renormalizing all player names to ascii.");
-  connection.end();
 }
 /**
  * Finds all non ascii characters in player names and logs the details. Meant for testing the noAccents function
  *
  */
 export async function find_all_bad_chars() {
-  const connection = await connect();
-  const players: players[] = await connection.query("SELECT * FROM players");
+  const players = await db.selectFrom("players").select("name").execute();
   const chars_found = new Set<string>();
   for (const player of players) {
     for (const char of noAccents(player.name)) {
@@ -127,9 +129,10 @@ export async function find_all_bad_chars() {
       }
     }
   }
-  const players2: historicalPlayers[] = await connection.query(
-    "SELECT * FROM historicalPlayers",
-  );
+  const players2 = await db
+    .selectFrom("historicalPlayers")
+    .select("name")
+    .execute();
   for (const player of players2) {
     for (const char of noAccents(player.name)) {
       if (char.charCodeAt(0) > 127 && !chars_found.has(char)) {
@@ -138,5 +141,4 @@ export async function find_all_bad_chars() {
       }
     }
   }
-  connection.end();
 }

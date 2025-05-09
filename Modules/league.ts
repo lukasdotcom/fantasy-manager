@@ -1,6 +1,5 @@
 import { GetServerSidePropsContext, GetServerSidePropsResult } from "next";
-import connect from "./database";
-import { leagueSettings } from "#type/database";
+import db from "./database";
 import { authOptions } from "#/pages/api/auth/[...nextauth]";
 import { getServerSession } from "next-auth";
 import { getData } from "#/pages/api/theme";
@@ -11,22 +10,33 @@ const redirect = async (
 ): Promise<GetServerSidePropsResult<{ [key: string]: unknown }>> => {
   const league = parseInt(String(ctx.params?.league));
   const session = await getServerSession(ctx.req, ctx.res, authOptions);
-  const connection = await connect();
   if (session) {
     // Checks if the user is in the league or not
-    const leagueInfo: leagueSettings[] = await connection.query(
-      "SELECT * FROM leagueSettings WHERE leagueID=? and EXISTS (SELECT * FROM leagueUsers WHERE user=? and leagueUsers.leagueID = leagueSettings.leagueID)",
-      [league, session.user.id],
-    );
-    connection.query("UPDATE leagueSettings SET active=1 WHERE leagueID=?", [
-      league,
-    ]);
-    connection.end();
+    const leagueInfo = await db
+      .selectFrom("leagueSettings")
+      .selectAll()
+      .where("leagueID", "=", league)
+      .where((qb) =>
+        qb.exists(
+          qb
+            .selectFrom("leagueUsers")
+            .selectAll("leagueUsers")
+            .where("leagueID", "=", qb.ref("leagueSettings.leagueID"))
+            .where("user", "=", session.user.id),
+        ),
+      )
+      .execute();
+    db.updateTable("leagueSettings")
+      .set("active", 1)
+      .where("leagueID", "=", league)
+      .execute();
     if (leagueInfo.length > 0) {
-      const transferOpen = await connection
-        .query("SELECT * FROM data WHERE value1=? AND value2='true'", [
-          "transferOpen" + leagueInfo[0].league,
-        ])
+      const transferOpen = await db
+        .selectFrom("data")
+        .select("value1")
+        .where("value1", "=", "transferOpen" + leagueInfo[0].league)
+        .where("value2", "=", "true")
+        .execute()
         .then((e) => e.length > 0);
       return {
         props: {
@@ -44,10 +54,12 @@ const redirect = async (
     }
   } else {
     // If the user is not logged in it checks if the league exists
-    const leagueExists = await connection
-      .query("SELECT * FROM leagueSettings WHERE leagueID=?", [league])
+    const leagueExists = await db
+      .selectFrom("leagueSettings")
+      .selectAll()
+      .where("leagueID", "=", league)
+      .execute()
       .then((res) => res.length > 0);
-    connection.end();
     if (leagueExists) {
       // Makes sure to redirect a user that is not logged in but went to a valid league to a login
       return {

@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from "next";
-import connect from "../../../../Modules/database";
+import db from "../../../../Modules/database";
 import { announcements } from "#types/database";
 import { authOptions } from "#/pages/api/auth/[...nextauth]";
 import { getServerSession } from "next-auth";
@@ -10,52 +10,50 @@ export default async function handler(
 ) {
   const session = await getServerSession(req, res, authOptions);
   if (session) {
-    const connection = await connect();
-    const league = req.query.league;
+    const league = parseInt(String(req.query.league));
+    const isAdmin =
+      (await db
+        .selectFrom("leagueUsers")
+        .selectAll()
+        .where("leagueID", "=", league)
+        .where("user", "=", session.user.id)
+        .where("admin", "=", 1)
+        .executeTakeFirst()) !== undefined;
     switch (req.method) {
       // Used to add an anouncement
       case "POST":
         // Checks if the user is qualified to do this
-        if (
-          (
-            await connection.query(
-              "SELECT * FROM leagueUsers WHERE leagueID=? and user=? AND admin=1",
-              [league, session.user.id],
-            )
-          ).length > 0
-        ) {
+        if (isAdmin) {
           // Adds the announcement
           const {
             priority = "info",
             title = "",
             description = "",
           }: announcements = req.body;
-          await connection
-            .query(
-              "INSERT INTO announcements (leagueID, priority, title, description) VALUES (?, ?, ?, ?)",
-              [league, priority, title, description],
-            )
-            .then(() => res.status(200).end("Added anouncement"))
-            .catch(() => res.status(500).end("Failed to create announcement"));
+          await db
+            .insertInto("announcements")
+            .values({
+              leagueID: league,
+              priority: priority,
+              title: title,
+              description: description,
+            })
+            .execute();
+          res.status(200).end("Added announcement");
         } else {
           res.status(401).end("You are not admin of this league");
         }
         break;
-      case "DELETE": // Used to delete an anouncement
+      case "DELETE": // Used to delete an announcement
         // Checks if the user is qualified to do this
-        if (
-          (
-            await connection.query(
-              "SELECT * FROM leagueUsers WHERE leagueID=? and user=? AND admin=1",
-              [league, session.user.id],
-            )
-          ).length > 0
-        ) {
+        if (isAdmin) {
           const { title = "", description = "" }: announcements = req.body;
-          await connection.query(
-            "DELETE FROM announcements WHERE leagueID=? AND title=? AND description=?",
-            [league, title, description],
-          );
+          await db
+            .deleteFrom("announcements")
+            .where("leagueID", "=", league)
+            .where("title", "=", title)
+            .where("description", "=", description)
+            .execute();
           res.status(200).end("Deleted announcement");
         } else {
           res.status(401).end("You are not admin of this league");
@@ -65,7 +63,6 @@ export default async function handler(
         res.status(405).end(`Method ${req.method} Not Allowed`);
         break;
     }
-    connection.end();
   } else {
     res.status(401).end("Not logged in");
   }

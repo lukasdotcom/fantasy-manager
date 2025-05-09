@@ -1,64 +1,63 @@
-import connect from "../Modules/database";
-import {
-  clubs,
-  historicalClubs,
-  leagueSettings,
-  leagueUsers,
-  points,
-  position,
-  predictions,
-} from "#types/database";
+import db from "../Modules/database";
+import { LeagueSettings, LeagueUsers, Points } from "#type/db";
+import { Selectable } from "kysely";
 
 async function top11(userID: number, leagueID: number) {
-  const connection = await connect();
   const formation = JSON.parse(
-    await connection
-      .query("SELECT formation FROM leagueUsers WHERE leagueID=? AND user=?", [
-        leagueID,
-        userID,
-      ])
-      .then((e) => e[0].formation),
+    (
+      await db
+        .selectFrom("leagueUsers")
+        .select("formation")
+        .where("leagueID", "=", leagueID)
+        .where("user", "=", userID)
+        .executeTakeFirst()
+    )?.formation || "",
   );
-  // Moves all players off the field
-  await connection.query(
-    `UPDATE squad SET position=(SELECT position FROM players WHERE players.uid=squad.playeruid AND league=(SELECT league FROM leagueSettings WHERE leagueID=?)) WHERE leagueID=? AND user=?`,
-    [leagueID, leagueID, userID],
-  );
-  const players: { playeruid: string; position: position; points: number }[] =
-    await connection.query(
-      `SELECT 
-        squad.playeruid, 
-        players.position, 
-        players.last_match + players.last_match * starred AS points 
-      FROM 
-        squad 
-        LEFT OUTER JOIN players ON players.uid = squad.playeruid 
-      WHERE 
-        user = ? 
-        AND leagueID = ? 
-      ORDER BY 
-        players.position, 
-        points DESC`,
-      [userID, leagueID],
-    );
+  const leagueSettings = await db
+    .selectFrom("leagueSettings")
+    .select(["league", "starredPercentage"])
+    .where("leagueID", "=", leagueID)
+    .executeTakeFirst();
+  const players = await db
+    .selectFrom("squad")
+    .innerJoin("players", "players.uid", "squad.playeruid")
+    .select((eb) => [
+      "squad.playeruid",
+      "players.position",
+      eb(
+        "players.last_match",
+        "+",
+        eb(
+          "players.last_match",
+          "*",
+          eb(
+            "starred",
+            "*",
+            (leagueSettings?.starredPercentage || 100) / 100 - 1,
+          ),
+        ),
+      ).as("points"),
+    ])
+    .where("user", "=", userID)
+    .where("leagueID", "=", leagueID)
+    .orderBy("players.position", "desc")
+    .orderBy("points", "desc")
+    .execute();
   const parts = ["gk", "def", "mid", "att"];
   // Goes through every character and moves them to the correct position
   for (const player of players) {
     const position = parts.indexOf(player.position);
-    if (formation[position] > 0) {
-      await connection.query(
-        "UPDATE squad SET position=? WHERE playeruid=? AND leagueID=? AND user=?",
-        [player.position, player.playeruid, leagueID, userID],
-      );
-      formation[position]--;
-    } else {
-      await connection.query(
-        "UPDATE squad SET position='bench' WHERE playeruid=? AND leagueID=? AND user=?",
-        [player.playeruid, leagueID, userID],
-      );
-    }
+    await db
+      .updateTable("squad")
+      .set({
+        position: formation[position] > 0 ? player.position : "bench",
+      })
+      .where("playeruid", "=", player.playeruid)
+      .where("leagueID", "=", leagueID)
+      .where("user", "=", userID)
+      .execute();
+    formation[position]--;
   }
-  connection.end();
 }
 /**
  * Calculates the total points for unstarred players for a user.
@@ -66,15 +65,26 @@ async function top11(userID: number, leagueID: number) {
  * @param {leagueUsers} user - The user for whom to calculate the points.
  * @return {Promise<number>} The total points for unstarred players.
  */
-async function calcUnstarredPoints(user: leagueUsers): Promise<number> {
-  const connection = await connect();
-  const result: number[] = await connection.query(
-    "SELECT SUM(last_match) FROM players WHERE EXISTS (SELECT * FROM squad WHERE squad.playeruid=players.uid AND position!='bench' AND leagueID=? AND user=? AND starred=0)",
-    [user.leagueID, user.user],
-  );
-  await connection.end();
-  const value = Object.values(result[0])[0];
-  return value ? value : 0;
+async function calcUnstarredPoints(
+  user: Selectable<LeagueUsers>,
+): Promise<number> {
+  const result = await db
+    .selectFrom("players")
+    .select([(eb) => eb.fn.sum("last_match").as("sum")])
+    .where((eb) =>
+      eb.exists(
+        eb
+          .selectFrom("squad")
+          .select("squad.leagueID")
+          .whereRef("squad.playeruid", "=", "players.uid")
+          .where("position", "!=", "bench")
+          .where("leagueID", "=", user.leagueID)
+          .where("user", "=", user.user)
+          .where("starred", "=", 0),
+      ),
+    )
+    .executeTakeFirst();
+  return parseInt(String(result?.sum)) || 0;
 }
 /**
  * Calculates the total points for a user's starred players in a league.
@@ -82,34 +92,45 @@ async function calcUnstarredPoints(user: leagueUsers): Promise<number> {
  * @param {leagueUsers} user - The user for whom to calculate the points.
  * @return {Promise<number>} The total points for the user's starred players.
  */
-export async function calcStarredPoints(user: leagueUsers): Promise<number> {
-  const connection = await connect();
-  const data: {
-    "SUM(last_match)": number;
-  }[] = await connection.query(
-    "SELECT SUM(last_match) FROM players WHERE EXISTS (SELECT * FROM squad WHERE squad.playeruid=players.uid AND position!='bench' AND leagueID=? AND user=? AND starred=1)",
-    [user.leagueID, user.user],
-  );
-  const points = Object.values(data[0])[0];
-  const starMultiplier = await connection
-    .query("SELECT starredPercentage FROM leagueSettings WHERE leagueID=?", [
-      user.leagueID,
-    ])
-    .then((res) => (res.length > 0 ? res[0].starredPercentage / 100 : 1.5));
-  connection.end();
+export async function calcStarredPoints(
+  user: Selectable<LeagueUsers>,
+): Promise<number> {
+  const result = await db
+    .selectFrom("players")
+    .select([(eb) => eb.fn.sum("last_match").as("sum")])
+    .where((eb) =>
+      eb.exists(
+        eb
+          .selectFrom("squad")
+          .select("squad.leagueID")
+          .whereRef("squad.playeruid", "=", "players.uid")
+          .where("position", "!=", "bench")
+          .where("leagueID", "=", user.leagueID)
+          .where("user", "=", user.user)
+          .where("starred", "=", 1),
+      ),
+    )
+    .executeTakeFirst();
+  const points = parseInt(String(result?.sum)) || 0;
+  const starMultiplier = await db
+    .selectFrom("leagueSettings")
+    .select("starredPercentage")
+    .where("leagueID", "=", user.leagueID)
+    .executeTakeFirst()
+    .then((e) => (e ? e.starredPercentage / 100 : 1.5));
   return Math.ceil(points * starMultiplier);
 }
 export interface predictions_raw {
   club: string;
-  home?: number;
-  away?: number;
+  home: number | null;
+  away: number | null;
 }
 /**
  * Calculates the total prediction points based on the provided predictions and actual game results.
  *
  * @param {predictions_raw[]} predictions - An array of predicted scores for various clubs.
  * @param {predictions_raw[]} games - An array of actual game results for various clubs.
- * @param {leagueSettings} settings - The league settings that contain the scoring rules for predictions.
+ * @param {Selectable<LeagueSettings>} settings - The league settings that contain the scoring rules for predictions.
  * @return {number} The total points accumulated from the predictions based on the scoring rules.
  *
  * The function iterates through each prediction and compares it against the actual game result for the same club.
@@ -121,15 +142,15 @@ export interface predictions_raw {
 export function calcPredicitionPointsRaw(
   predictions: predictions_raw[],
   games: predictions_raw[],
-  settings: leagueSettings,
+  settings: Selectable<LeagueSettings>,
 ): number {
   let points = 0;
   for (const prediction of predictions) {
-    if (prediction.home === undefined || prediction.away === undefined) {
+    if (prediction.home === null || prediction.away === null) {
       continue;
     }
     for (const game of games) {
-      if (game.home === undefined || game.away === undefined) {
+      if (game.home === null || game.away === null) {
         continue;
       }
       if (prediction.club == game.club) {
@@ -160,33 +181,36 @@ export function calcPredicitionPointsRaw(
  * @return {Promise<number>} The total prediction points for the user for the given matchday.
  */
 export async function calcHistoricalPredictionPoints(
-  matchday: points,
+  matchday: Selectable<Points>,
 ): Promise<number> {
-  const connection = await connect();
-  const temp: leagueSettings[] = await connection.query(
-    "SELECT * FROM leagueSettings WHERE leagueID=?",
-    [matchday.leagueID],
-  );
-  if (temp.length == 0) {
+  const settings = await db
+    .selectFrom("leagueSettings")
+    .selectAll()
+    .where("leagueID", "=", matchday.leagueID)
+    .executeTakeFirst();
+  if (settings === undefined) {
     return 0;
   }
-  const settings: leagueSettings = temp[0];
-  const predictions: predictions[] = await connection.query(
-    "SELECT * FROM historicalPredictions WHERE user=? AND leagueID=? AND matchday=?",
-    [matchday.user, matchday.leagueID, matchday.matchday],
-  );
-  const games: predictions_raw[] = (
-    await connection.query(
-      "SELECT * FROM historicalClubs WHERE league=? AND home=1 AND time=?",
-      [settings.league, matchday.time],
-    )
-  ).map((e: historicalClubs) => {
-    return {
-      home: e.teamScore,
-      away: e.opponentScore,
-      club: e.club,
-    };
-  });
+  const predictions = await db
+    .selectFrom("historicalPredictions")
+    .selectAll()
+    .where("user", "=", matchday.user)
+    .where("leagueID", "=", matchday.leagueID)
+    .where("matchday", "=", matchday.matchday)
+    .execute();
+  const games = (
+    await db
+      .selectFrom("historicalClubs")
+      .selectAll()
+      .where("league", "=", settings.league)
+      .where("home", "=", 1)
+      .where("time", "=", matchday.time)
+      .execute()
+  ).map((e) => ({
+    home: e.teamScore,
+    away: e.opponentScore,
+    club: e.club,
+  }));
   return calcPredicitionPointsRaw(predictions, games, settings);
 }
 /**
@@ -196,187 +220,392 @@ export async function calcHistoricalPredictionPoints(
  * @return {Promise<number>} The prediction points for the user.
  */
 export async function calcPredictionsPointsNow(
-  user: leagueUsers,
+  user: Selectable<LeagueUsers>,
 ): Promise<number> {
-  const connection = await connect();
-  const temp: leagueSettings[] = await connection.query(
-    "SELECT * FROM leagueSettings WHERE leagueID=?",
-    [user.leagueID],
-  );
-  if (temp.length == 0) {
+  const settings = await db
+    .selectFrom("leagueSettings")
+    .selectAll()
+    .where("leagueID", "=", user.leagueID)
+    .executeTakeFirst();
+  if (settings === undefined) {
     return 0;
   }
-  const settings: leagueSettings = temp[0];
   // Changes all the nulls to 0's to prevent invalid predictions from existing
-  await connection.query(
-    "UPDATE predictions SET home=IFNULL(home, 0), away=IFNULL(away, 0) WHERE user=? AND leagueID=?",
-    [user.user, user.leagueID],
-  );
-  const predictions: predictions[] = await connection.query(
-    "SELECT * FROM predictions WHERE user=? AND leagueID=?",
-    [user.user, user.leagueID],
-  );
-  const games: predictions_raw[] = (
-    await connection.query("SELECT * FROM clubs WHERE league=? AND home=1", [
-      settings.league,
-    ])
-  ).map((e: clubs) => {
-    return {
-      club: e.club,
-      home: e.teamScore,
-      away: e.opponentScore,
-    };
-  });
-  connection.end();
+  await db
+    .updateTable("predictions")
+    .set({
+      home: (eb) => eb.fn.coalesce("home", eb.lit(0)),
+      away: (eb) => eb.fn.coalesce("away", eb.lit(0)),
+    })
+    .where("user", "=", user.user)
+    .where("leagueID", "=", user.leagueID)
+    .execute();
+  const predictions = await db
+    .selectFrom("predictions")
+    .selectAll()
+    .where("user", "=", user.user)
+    .where("leagueID", "=", user.leagueID)
+    .execute();
+  const games = (
+    await db
+      .selectFrom("clubs")
+      .selectAll()
+      .where("league", "=", settings.league)
+      .where("home", "=", 1)
+      .execute()
+  ).map((e) => ({
+    club: e.club,
+    home: e.teamScore,
+    away: e.opponentScore,
+  }));
   return calcPredicitionPointsRaw(predictions, games, settings);
 }
 /**
  * Calculates and updates the points for the specified league.
  *
- * @param {string | number} league - The league type or leagueID.
+ * @param {string | number} leagueInput - The league type or leagueID.
  */
-export async function calcPoints(league: string | number) {
-  const connection = await connect();
-  let leagueID: false | number = false;
-  // Checks if a league number was requested instead of an entire league type
-  if (parseInt(String(league)) > 0) {
-    const leagueData: leagueSettings[] = await connection.query(
-      "SELECT * FROM leagueSettings WHERE leagueID=? AND archived=0",
-      [league],
-    );
-    if (leagueData.length > 0) {
-      leagueID = leagueData[0].leagueID;
-      league = leagueData[0].league;
+export async function calcPointsType(leagueInput: string | number) {
+  let determinedLeagueID: number | undefined;
+  let determinedLeagueName: string = String(leagueInput);
+
+  const parsedLeagueID = parseInt(String(leagueInput));
+  if (!isNaN(parsedLeagueID) && parsedLeagueID > 0) {
+    const leagueData = await db
+      .selectFrom("leagueSettings")
+      .select(["leagueID", "league"])
+      .where("leagueID", "=", parsedLeagueID)
+      .where("archived", "=", 0)
+      .executeTakeFirst();
+    if (leagueData) {
+      determinedLeagueID = leagueData.leagueID;
+      determinedLeagueName = leagueData.league;
     }
   }
+
   // Makes sure that the transfer season is running
-  if (
-    await connection
-      .query("SELECT value2 FROM data WHERE value1=?", [
-        "transferOpen" + league,
-      ])
-      .then((result) => (result.length > 0 ? result[0].value2 == "true" : true))
-  ) {
-    connection.end();
+  const transferOpenData = await db
+    .selectFrom("data")
+    .select("value2")
+    .where("value1", "=", "transferOpen" + determinedLeagueName)
+    .executeTakeFirst();
+
+  if (transferOpenData?.value2 === "true") {
     return;
   }
+
   console.log(
     `Calculating user points for ${
-      leagueID ? `leagueID ${leagueID} in the ` : ""
-    }${league}`,
+      determinedLeagueID ? `leagueID ${determinedLeagueID} in the ` : ""
+    }${determinedLeagueName}`,
   );
-  const leagueUsers: leagueUsers[] = leagueID
-    ? await connection.query(
-        "SELECT leagueID, user, points, fantasyPoints, predictionPoints FROM leagueUsers WHERE leagueID=?",
-        [leagueID],
+
+  let leagueUsers: Selectable<LeagueUsers>[];
+  if (determinedLeagueID) {
+    leagueUsers = await db
+      .selectFrom("leagueUsers")
+      .selectAll()
+      .where("leagueID", "=", determinedLeagueID)
+      .execute();
+  } else {
+    leagueUsers = await db
+      .selectFrom("leagueUsers")
+      .selectAll()
+      .where((eb) =>
+        eb.exists(
+          eb
+            .selectFrom("leagueSettings")
+            .select("leagueSettings.leagueID")
+            .whereRef("leagueSettings.leagueID", "=", "leagueUsers.leagueID")
+            .where("leagueSettings.league", "=", determinedLeagueName)
+            .where("leagueSettings.archived", "=", 0)
+            .where((eb2) =>
+              eb2.exists(
+                eb2
+                  .selectFrom("points")
+                  .select("points.leagueID")
+                  .whereRef("points.leagueID", "=", "leagueUsers.leagueID")
+                  .where("points.time", "is", null),
+              ),
+            ),
+        ),
       )
-    : await connection.query(
-        "SELECT leagueID, user, points, fantasyPoints, predictionPoints FROM leagueUsers WHERE EXISTS (SELECT * FROM leagueSettings WHERE league=? AND leagueSettings.leagueID=leagueUsers.leagueID AND EXISTS (SELECT * FROM points WHERE leagueUsers.leagueID=points.leagueID AND time IS NULL)) ORDER BY leagueID",
-        [league],
-      );
+      .orderBy("leagueID")
+      .execute();
+  }
+
   let index = 0;
-  let currentleagueID = -1;
+  let currentProcessingLeagueID = -1; // Renamed to avoid conflict with loop variable e.leagueID
   let matchday = 1;
+
   while (index < leagueUsers.length) {
     const e = leagueUsers[index];
     index++;
+
     // Moves top 11 players when needed
-    if (
-      await connection
-        .query("SELECT * FROM leagueSettings WHERE leagueID=? AND top11=1", [
-          e.leagueID,
-        ])
-        .then((e) => e.length > 0)
-    ) {
+    const top11Setting = await db
+      .selectFrom("leagueSettings")
+      .select("leagueID") // Select any column to check existence
+      .where("leagueID", "=", e.leagueID)
+      .where("top11", "=", 1)
+      .executeTakeFirst();
+
+    if (top11Setting) {
       await top11(e.user, e.leagueID);
     }
-    const [
-      [oldFantasyPoints, oldPredictionPoints],
-      newFantasyPoints,
-      newPredictionPoints,
-    ] = await Promise.all([
-      // Gets how many points the user had for the matchday with the previous calculation
-      connection
-        .query(
-          "SELECT fantasyPoints, predictionPoints FROM points WHERE leagueID=? AND user=? AND time IS NULL ORDER BY matchday DESC LIMIT 1",
-          [e.leagueID, e.user],
-        )
-        .then((result: points[]) =>
-          result.length > 0
-            ? [result[0].fantasyPoints, result[0].predictionPoints]
-            : [0, 0],
-        ),
-      // Calculates the amont of points the user should have for the matchday
-      new Promise<number>(async (res) => {
-        res(
-          (
-            await Promise.all([
-              // Calculates points for unstarred players
-              calcUnstarredPoints(e),
-              // Calculates points for starred players
-              calcStarredPoints(e),
-            ])
-          ).reduce((a, b) => a + b),
-        );
-      }),
-      // Calculates the amont of points the user should have for the matchday in predictions
+
+    const oldPointsData = await db
+      .selectFrom("points")
+      .select(["fantasyPoints", "predictionPoints"])
+      .where("leagueID", "=", e.leagueID)
+      .where("user", "=", e.user)
+      .where("time", "is", null)
+      .orderBy("matchday", "desc")
+      .limit(1)
+      .executeTakeFirst();
+
+    const [oldFantasyPoints, oldPredictionPoints] = oldPointsData
+      ? [oldPointsData.fantasyPoints ?? 0, oldPointsData.predictionPoints ?? 0] // Handle null from DB
+      : [0, 0];
+
+    const newFantasyPointsPromise = (async () => {
+      const unstarred = await calcUnstarredPoints(e);
+      const starred = await calcStarredPoints(e);
+      return unstarred + starred;
+    })();
+
+    const [newFantasyPoints, newPredictionPoints] = await Promise.all([
+      newFantasyPointsPromise,
       calcPredictionsPointsNow(e),
     ]);
-    // Checks if the matchday might be different
-    if (e.leagueID !== currentleagueID) {
-      currentleagueID = e.leagueID;
-      // Calculates the latest matchday for that league
-      matchday = await connection
-        .query(
-          "SELECT matchday FROM points WHERE leagueID=? ORDER BY matchday DESC LIMIT 1",
-          [currentleagueID],
-        )
-        .then((result) => (result.length > 0 ? result[0].matchday : 1));
+
+    if (e.leagueID !== currentProcessingLeagueID) {
+      currentProcessingLeagueID = e.leagueID;
+      const matchdayData = await db
+        .selectFrom("points")
+        .select("matchday")
+        .where("leagueID", "=", currentProcessingLeagueID)
+        .orderBy("matchday", "desc")
+        .limit(1)
+        .executeTakeFirst();
+      matchday = matchdayData ? matchdayData.matchday : 1;
     }
-    // Checks if the fanasy point amount has changed and if they are different they are updated
+
     if (oldFantasyPoints !== newFantasyPoints) {
-      connection.query(
-        "UPDATE points SET fantasyPoints=?, points=?+predictionPoints WHERE leagueID=? AND user=? AND matchday=?",
-        [newFantasyPoints, newFantasyPoints, e.leagueID, e.user, matchday],
-      );
-      connection.query(
-        "UPDATE leagueUsers SET fantasyPoints=?, points=?+predictionPoints WHERE leagueID=? AND user=?",
-        [
-          e.fantasyPoints - oldFantasyPoints + newFantasyPoints,
-          e.fantasyPoints - oldFantasyPoints + newFantasyPoints,
-          e.leagueID,
-          e.user,
-        ],
-      );
+      await db
+        .updateTable("points")
+        .set((eb) => ({
+          fantasyPoints: newFantasyPoints,
+          points: eb("predictionPoints", "+", newFantasyPoints),
+        }))
+        .where("leagueID", "=", e.leagueID)
+        .where("user", "=", e.user)
+        .where("matchday", "=", matchday)
+        .execute();
+
+      const updatedUserFantasyPoints =
+        (e.fantasyPoints ?? 0) - oldFantasyPoints + newFantasyPoints;
+      await db
+        .updateTable("leagueUsers")
+        .set((eb) => ({
+          fantasyPoints: updatedUserFantasyPoints,
+          points: eb("predictionPoints", "+", updatedUserFantasyPoints),
+        }))
+        .where("leagueID", "=", e.leagueID)
+        .where("user", "=", e.user)
+        .execute();
+      e.fantasyPoints = updatedUserFantasyPoints; // Update in-memory object if used later
     }
-    // Checks if the prediction point amount has changed
+
     if (oldPredictionPoints !== newPredictionPoints) {
-      connection.query(
-        "UPDATE points SET predictionPoints=?, points=?+fantasyPoints WHERE leagueID=? AND user=? AND matchday=?",
-        [
-          newPredictionPoints,
-          newPredictionPoints,
-          e.leagueID,
-          e.user,
-          matchday,
-        ],
-      );
-      connection.query(
-        "UPDATE leagueUsers SET predictionPoints=?, points=?+fantasyPoints WHERE leagueID=? AND user=?",
-        [
-          e.predictionPoints - oldPredictionPoints + newPredictionPoints,
-          e.predictionPoints - oldPredictionPoints + newPredictionPoints,
-          e.leagueID,
-          e.user,
-        ],
-      );
+      await db
+        .updateTable("points")
+        .set((eb) => ({
+          predictionPoints: newPredictionPoints,
+          points: eb("fantasyPoints", "+", newPredictionPoints),
+        }))
+        .where("leagueID", "=", e.leagueID)
+        .where("user", "=", e.user)
+        .where("matchday", "=", matchday)
+        .where("time", "is", null) // typically update current matchday record
+        .execute();
+
+      const updatedUserPredictionPoints =
+        (e.predictionPoints ?? 0) - oldPredictionPoints + newPredictionPoints;
+      await db
+        .updateTable("leagueUsers")
+        .set((eb) => ({
+          predictionPoints: updatedUserPredictionPoints,
+          points: eb("fantasyPoints", "+", updatedUserPredictionPoints),
+        }))
+        .where("leagueID", "=", e.leagueID)
+        .where("user", "=", e.user)
+        .execute();
+      e.predictionPoints = updatedUserPredictionPoints; // Update in-memory object
     }
   }
   console.log(
     `Updated user points for ${
-      leagueID ? `leagueID ${leagueID} in the ` : ""
-    }${league}`,
+      determinedLeagueID ? `leagueID ${determinedLeagueID} in the ` : ""
+    }${determinedLeagueName}`,
   );
-  connection.end();
+  return;
+}
+/**
+ * Calculates and updates the points for the specified league.
+ *
+ * @param {number} leagueID_input - The league id.
+ */
+export async function calcPointsLeague(leagueID_input: number) {
+  const leagueSetting = await db
+    .selectFrom("leagueSettings")
+    .select(["leagueID", "league"])
+    .where("leagueID", "=", leagueID_input)
+    .where("archived", "=", 0)
+    .executeTakeFirst();
+
+  if (!leagueSetting) {
+    console.log(`League with ID ${leagueID_input} not found or archived.`);
+    return;
+  }
+
+  const currentLeagueID = leagueSetting.leagueID;
+  const currentLeagueName = leagueSetting.league;
+
+  // Makes sure that the transfer season is running
+  const transferOpenData = await db
+    .selectFrom("data")
+    .select("value2")
+    .where("value1", "=", "transferOpen" + currentLeagueName)
+    .executeTakeFirst();
+
+  if (transferOpenData?.value2 === "true") {
+    // connection.end(); // Not needed
+    return;
+  }
+
+  console.log(
+    `Calculating user points for leagueID ${currentLeagueID} in the ${currentLeagueName}`,
+  );
+
+  const leagueUsers: Selectable<LeagueUsers>[] = await db
+    .selectFrom("leagueUsers")
+    .selectAll()
+    .where("leagueID", "=", currentLeagueID)
+    .execute();
+
+  let index = 0;
+  let currentProcessingLeagueID = -1; // Tracks the leagueID for matchday calculation
+  let matchday = 1;
+
+  while (index < leagueUsers.length) {
+    const e = leagueUsers[index];
+    index++;
+
+    const top11Setting = await db
+      .selectFrom("leagueSettings")
+      .select("leagueID")
+      .where("leagueID", "=", e.leagueID)
+      .where("top11", "=", 1)
+      .executeTakeFirst();
+
+    if (top11Setting) {
+      await top11(e.user, e.leagueID);
+    }
+
+    const oldPointsData = await db
+      .selectFrom("points")
+      .select(["fantasyPoints", "predictionPoints"])
+      .where("leagueID", "=", e.leagueID)
+      .where("user", "=", e.user)
+      .where("time", "is", null)
+      .orderBy("matchday", "desc")
+      .limit(1)
+      .executeTakeFirst();
+
+    const [oldFantasyPoints, oldPredictionPoints] = oldPointsData
+      ? [oldPointsData.fantasyPoints ?? 0, oldPointsData.predictionPoints ?? 0]
+      : [0, 0];
+
+    const newFantasyPointsPromise = (async () => {
+      const unstarred = await calcUnstarredPoints(e);
+      const starred = await calcStarredPoints(e);
+      return unstarred + starred;
+    })();
+
+    const [newFantasyPoints, newPredictionPoints] = await Promise.all([
+      newFantasyPointsPromise,
+      calcPredictionsPointsNow(e),
+    ]);
+
+    if (e.leagueID !== currentProcessingLeagueID) {
+      currentProcessingLeagueID = e.leagueID;
+      const matchdayData = await db
+        .selectFrom("points")
+        .select("matchday")
+        .where("leagueID", "=", currentProcessingLeagueID)
+        .orderBy("matchday", "desc")
+        .limit(1)
+        .executeTakeFirst();
+      matchday = matchdayData ? matchdayData.matchday : 1;
+    }
+
+    if (oldFantasyPoints !== newFantasyPoints) {
+      await db
+        .updateTable("points")
+        .set((eb) => ({
+          fantasyPoints: newFantasyPoints,
+          points: eb("predictionPoints", "+", newFantasyPoints),
+        }))
+        .where("leagueID", "=", e.leagueID)
+        .where("user", "=", e.user)
+        .where("matchday", "=", matchday)
+        .where("time", "is", null)
+        .execute();
+
+      const updatedUserFantasyPoints =
+        (e.fantasyPoints ?? 0) - oldFantasyPoints + newFantasyPoints;
+      await db
+        .updateTable("leagueUsers")
+        .set((eb) => ({
+          fantasyPoints: updatedUserFantasyPoints,
+          points: eb("predictionPoints", "+", updatedUserFantasyPoints),
+        }))
+        .where("leagueID", "=", e.leagueID)
+        .where("user", "=", e.user)
+        .execute();
+      e.fantasyPoints = updatedUserFantasyPoints;
+    }
+
+    if (oldPredictionPoints !== newPredictionPoints) {
+      await db
+        .updateTable("points")
+        .set((eb) => ({
+          predictionPoints: newPredictionPoints,
+          points: eb("fantasyPoints", "+", newPredictionPoints),
+        }))
+        .where("leagueID", "=", e.leagueID)
+        .where("user", "=", e.user)
+        .where("matchday", "=", matchday)
+        .where("time", "is", null)
+        .execute();
+
+      const updatedUserPredictionPoints =
+        (e.predictionPoints ?? 0) - oldPredictionPoints + newPredictionPoints;
+      await db
+        .updateTable("leagueUsers")
+        .set((eb) => ({
+          predictionPoints: updatedUserPredictionPoints,
+          points: eb("fantasyPoints", "+", updatedUserPredictionPoints),
+        }))
+        .where("leagueID", "=", e.leagueID)
+        .where("user", "=", e.user)
+        .execute();
+      e.predictionPoints = updatedUserPredictionPoints;
+    }
+  }
+  console.log(
+    `Updated user points for leagueID ${currentLeagueID} in the ${currentLeagueName}`,
+  );
   return;
 }

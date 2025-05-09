@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "export NODE_ENV=development APP_ENV=development && npm run start2:part1 && npm run dev:part2",
     "dev:part2": "ts-node --project=tsconfig2.json scripts/entrypoint.ts & next dev",
-    "build": "export NODE_ENV=production APP_ENV=production && npm ci && npm run start2:part1 && next build",
+    "build": "export NODE_ENV=production APP_ENV=production && npm run start2:part1 && next build",
     "start": "export NODE_ENV=production APP_ENV=production && npm run start2",
     "test": "export NODE_ENV=test APP_ENV=test && ts-node --project=tsconfig2.json scripts/jestSetup.ts && jest --watch",
     "test:cli": "export NODE_ENV=test APP_ENV=test && ts-node --project=tsconfig2.json scripts/jestSetup.ts && jest",
@@ -20,16 +20,21 @@
     "cypress:open": "cypress open",
     "cypress": "wait-on http://127.0.0.1:3000 && cypress run",
     "start:no-build": "npm run start2:part1 && ts-node --project=tsconfig2.json scripts/entrypoint.ts & next start",
-    "clean": "rm -f tsconfig2.tsbuildinfo; rm -f tsconfig3.tsbuildinfo; rm -f test.db; rm -rf ./scripts/data; rm -rf ./players; rm -rf ./.next/cache/images"
+    "clean": "rm -f tsconfig2.tsbuildinfo; rm -f tsconfig3.tsbuildinfo; rm -f test.db; rm -rf ./scripts/data; rm -rf ./players; rm -rf ./.next/cache/images",
+    "dbtypes": "kysely-codegen --url ./test.db --out-file ./types/db.ts",
+    "dbtypes:check": "kysely-codegen --url ./test.db --out-file ./types/db.ts --verify --log-level=error"
   },
   "dependencies": {
+    "@types/better-sqlite3": "7.6.13",
     "@emotion/react": "11.14.0",
     "@emotion/styled": "11.14.0",
     "@mui/material": "6.2.1",
     "bcrypt": "5.1.1",
+    "better-sqlite3": "11.9.1",
     "chart.js": "4.4.7",
     "csv-stringify": "6.5.2",
     "dotenv": "16.4.7",
+    "kysely": "0.27.6",
     "next": "15.1.2",
     "next-auth": "4.24.11",
     "next-pwa": "5.6.0",
@@ -37,8 +42,6 @@
     "react-chartjs-2": "5.2.0",
     "react-dom": "18.3.1",
     "sharp": "0.33.5",
-    "sqlite": "5.1.1",
-    "sqlite3": "5.1.7",
     "ts-node": "10.9.2"
   },
   "engines": {
@@ -56,6 +59,7 @@
     "eslint": "9.17.0",
     "eslint-config-next": "15.1.2",
     "jest": "29.7.0",
+    "kysely-codegen": "0.18.3",
     "prettier": "3.4.2",
     "ts-jest": "29.2.5",
     "typescript": "5.7.2",

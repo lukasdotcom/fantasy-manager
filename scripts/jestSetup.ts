@@ -1,4 +1,4 @@
-import { setupDB } from "./setupDB";
+import { migrateToLatest } from "./migrate";
 
 // Setups an empty test database
-setupDB();
+migrateToLatest();

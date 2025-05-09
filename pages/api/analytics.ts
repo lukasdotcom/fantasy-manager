@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from "next";
-import connect from "../../Modules/database";
+import db from "../../Modules/database";
 import { detailedAnalytics } from "#types/database";
 import { compareSemanticVersions } from "../../Modules/semantic";
 
@@ -35,7 +35,6 @@ export default async function handler(
       res.status(400).send("Invalid JSON");
       return;
     }
-    const connection = await connect();
     const day = Math.floor(Date.now() / 1000 / 86400);
     // Checks if the analytics have to be translated from the old version used before 1.11 to the new version.
     if (compareSemanticVersions("1.11.0", version) === -1) {
@@ -68,15 +67,8 @@ export default async function handler(
       }
       leagueTotal = JSON.stringify(tempLeagueTotal);
     }
-    // Deletes the analytics data from the user if it already exists
-    await connection.query(
-      "DELETE FROM detailedAnalytics WHERE serverID=? AND day=?",
-      [serverID, day],
-    );
-    // Adds the analytics data
-    await connection.query(
-      "INSERT INTO detailedAnalytics (serverID, day, version, active, total, leagueActive, leagueTotal, themeActive, themeTotal, localeActive, localeTotal) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-      [
+    db.insertInto("detailedAnalytics")
+      .values({
         serverID,
         day,
         version,
@@ -88,9 +80,20 @@ export default async function handler(
         themeTotal,
         localeActive,
         localeTotal,
-      ],
-    );
-    await connection.end();
+      })
+      .onConflict((oc) =>
+        oc.doUpdateSet({
+          version,
+          active,
+          total,
+          leagueActive,
+          leagueTotal,
+          themeActive,
+          themeTotal,
+          localeActive,
+          localeTotal,
+        }),
+      );
     res.status(200).end();
   } else {
     res.status(400).end("Method does not exist");

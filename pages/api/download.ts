@@ -1,39 +1,32 @@
-import connect from "#/Modules/database";
+import db from "#/Modules/database";
 import getLocales from "#/locales/getLocales";
-import { players } from "#/types/database";
 import { stringify } from "csv-stringify/sync";
 import { NextApiRequest, NextApiResponse } from "next";
-interface returnType extends players {
+import { HistoricalPlayers, Players } from "#type/db";
+interface returnType extends Omit<Players, "locked"> {
   pictureUrl: string;
 }
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse,
 ) {
-  const connection = await connect();
-  let extraText = "";
   const league = req.query.league as string;
   if (
-    (
-      await connection.query(
-        "SELECT * FROM plugins WHERE name=? AND enabled=1",
-        [league],
-      )
-    ).length == 0
+    (await db
+      .selectFrom("plugins")
+      .where("name", "=", "league")
+      .select("name")
+      .executeTakeFirst()) === undefined
   ) {
     res.status(404).end("League does not exist");
     return;
-  }
-  // Checks if the player wants to show all the hidden ones
-  if (req.query.showHidden !== "true") {
-    extraText += " AND `exists`=1";
   }
   if (typeof req.query.time !== "string" && req.query.time !== undefined) {
     res.status(400).end("Invalid time");
     return;
   }
   const time = req.query.time ? parseInt(req.query.time) : 0;
-  const filter_function = (e: players) => {
+  const filter_function = (e: Players | HistoricalPlayers): returnType => {
     e.value = e.value / 1000000;
     e.sale_price = e.sale_price / 1000000;
     return {
@@ -45,20 +38,35 @@ export default async function handler(
         "&w=256&q=75",
     };
   };
+  const map_filter_function = (e: Players[] | HistoricalPlayers[]) =>
+    e.map(filter_function);
   const data: returnType[] =
     time > 0
-      ? (
-          await connection.query(
-            `SELECT * FROM historicalPlayers WHERE league=?${extraText} AND time=?`,
-            [league, time],
-          )
-        ).map(filter_function)
-      : (
-          await connection.query(
-            `SELECT * FROM players WHERE league=?${extraText}`,
-            [league],
-          )
-        ).map(filter_function);
+      ? await db
+          .selectFrom("historicalPlayers")
+          .selectAll()
+          .where((eb) => {
+            const conditions = [eb("league", "=", league)];
+            if (req.query.showHidden !== "true") {
+              conditions.push(eb("exists", "=", 1));
+            }
+            return eb.and(conditions);
+          })
+          .where("time", "=", time)
+          .execute()
+          .then(map_filter_function)
+      : await db
+          .selectFrom("players")
+          .selectAll()
+          .where((eb) => {
+            const conditions = [eb("league", "=", league)];
+            if (req.query.showHidden !== "true") {
+              conditions.push(eb("exists", "=", 1));
+            }
+            return eb.and(conditions);
+          })
+          .execute()
+          .then(map_filter_function);
   // Checks if this is a download by csv or json
   if (req.query.type === "csv") {
     const names: { [Key: string]: string } = {
@@ -102,5 +110,4 @@ export default async function handler(
       req.query.time ? parseInt(req.query.time) : "latest"
     } time and for league ${league}`,
   );
-  connection.end();
 }

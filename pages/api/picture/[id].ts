@@ -1,5 +1,5 @@
 import { createReadStream, existsSync, statSync } from "fs";
-import connect from "#database";
+import db from "#database";
 import { NextApiRequest, NextApiResponse } from "next";
 import { Readable } from "stream";
 import { picturePath } from "#/scripts/pictures";
@@ -14,23 +14,24 @@ export default async function handler(
   res: NextApiResponse,
 ) {
   res.setHeader("Cache-Control", `public, max-age=108000`);
-  const connection = await connect();
   if (
-    (
-      await connection.query(
-        "SELECT * FROM data WHERE value1='configDownloadPicture' AND value2='no'",
-      )
-    ).length > 0
+    (await db
+      .selectFrom("data")
+      .selectAll()
+      .where("value1", "=", "configDownloadPicture")
+      .where("value2", "=", "no")
+      .executeTakeFirst()) !== undefined
   ) {
-    const picture = await connection.query(
-      "SELECT * FROM pictures WHERE id=?",
-      [req.query.id],
-    );
-    if (picture.length === 0) {
+    const picture = await db
+      .selectFrom("pictures")
+      .where("id", "=", parseInt(String(req.query.id)))
+      .selectAll()
+      .executeTakeFirst();
+    if (picture === undefined) {
       res.status(404).end();
       return;
     }
-    await fetch(picture[0].url)
+    await fetch(picture.url)
       .then((r) => {
         // Note the following code is from https://stackoverflow.com/questions/74699607/how-to-pipe-to-next-js-13-api-response
         // eslint-disable-next-line @typescript-eslint/ban-ts-comment
@@ -44,9 +45,7 @@ export default async function handler(
         res.writeHead(200);
         stream.pipe(res);
       });
-    connection.end();
   } else {
-    connection.end();
     const filePath = picturePath(parseInt(String(req.query.id)));
     if (!existsSync(filePath)) {
       res.status(404).end();

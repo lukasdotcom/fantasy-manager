@@ -1,18 +1,24 @@
-import connect from "../../../Modules/database";
+import { sql } from "kysely";
+import db from "#database";
 
-// Used to return the username of a selected user
+/**
+ * Handles API requests for retrieving a user's username given their id.
+ *
+ * @function handler
+ * @param {http.IncomingMessage} req - The request object.
+ * @param {http.ServerResponse} res - The response object.
+ * @returns {Promise<void>}
+ */
 export default async function handler(req, res) {
   switch (req.method) {
     case "GET":
-      const connection = await connect();
       // Gets the id
       const id = req.query.id;
       await new Promise(async (resolve) => {
         // Checks if the user exists
-        const users = await connection.query(
-          "SELECT username FROM users WHERE id=?",
-          [id],
-        );
+        const users = await sql`SELECT username FROM users WHERE id=${id}`
+          .execute(db)
+          .then((e) => e.rows);
         if (users.length > 0) {
           res.status(200).json(users[0].username);
           resolve();
@@ -21,7 +27,6 @@ export default async function handler(req, res) {
           resolve();
         }
       });
-      connection.end();
       break;
     default:
       res.status(405).end(`Method ${req.method} Not Allowed`);

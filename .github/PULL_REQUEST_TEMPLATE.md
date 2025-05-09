@@ -5,13 +5,15 @@ Provide summary of changes with issue number if any.
 ## Have you done all the things below
 
 - [ ] Run `npm run format` to format everything with prettier.
-- [ ] Run `npm run lint` and fix all errors and warnings.
-- [ ] Made sure that all database changes have update code in startup.ts and the database schema was updated in database.ts.
-- [ ] Made sure to test your changes.
-- [ ] All sql syntax would work on sqlite.
-- [ ] Made sure to test your changes whith cypress by running `npm test` and when it is done stopping the server with ctr-c. If this fails and you don't know why look in the contributing guidelines or ask in this pull request. You can keep this unchecked and ignore it if you want to.
+- [ ] Run `npm run lint` and fix all errors and new warnings.
+- [ ] Made sure that all database changes have a migration and you ran `npm run dbtypes`.
+- [ ] Make sure to run the unit tests with `npm test`. This project uses vitest for more details look
+      at [Vitest](#Vitest).
+- [ ] Made sure to test your changes with [cypress](#cypress) by running `npm run start:test` and in another terminal
+      `npm run cypress` and when it is done stopping the server with ctr-c. If this fails, and you don't know why look in
+      the [cypress section](#cypress), or just create the pull request anyway and leave this unchecked.
 - [ ] If you added any features it would be great if you tested them with cypress(Not required).
-- [ ] If you added another league did you follow all the steps in the [leagues.md How to add another league](../leagues.md#how-to-add-another-league).
+- [ ] Did you make sure to have all text in the correct format as mentioned in [translating.md](TRANSLATING.MD#help)
 
 ## Change type
 

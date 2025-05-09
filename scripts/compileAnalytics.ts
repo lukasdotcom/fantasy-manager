@@ -1,5 +1,12 @@
-import connect from "#database";
-import { analytics, detailedAnalytics } from "#types/database";
+import db from "#database";
+import {
+  analytics as AnalyticsType,
+  detailedAnalytics as DetailedAnalyticsType,
+} from "#types/database";
+import { Selectable } from "kysely";
+
+// Define analyticsData type locally as in original
+type AnalyticsData = { [key: string]: number };
 
 /**
  * Turns the days of the analytics in the db into one entry in the final analytics table
@@ -7,29 +14,36 @@ import { analytics, detailedAnalytics } from "#types/database";
  * @param day The day of the week that should be compiled
  *
  */
-export default async function compileAnalytics(day: number) {
-  const connection = await connect();
+export default async function compileAnalytics(day: number): Promise<void> {
+  // No more connection = await connect() or connection.end()
+
   // Makes sure that if there was a duplicate for some reason it is ignored
-  const analytics: detailedAnalytics[] = await connection.query(
-    "SELECT DISTINCT * FROM detailedAnalytics WHERE day = ?",
-    [day],
-  );
-  const previousAnalytics: analytics[] = await connection.query(
-    "SELECT * FROM analytics WHERE day = ?",
-    [day - 1],
-  );
-  type analyticsData = { [key: string]: number };
-  let versionActive: analyticsData = {};
-  let versionTotal: analyticsData = {};
-  let leagueActive: analyticsData = {};
-  let leagueTotal: analyticsData = {};
-  let themeActive: analyticsData = {};
-  let themeTotal: analyticsData = {};
-  let localeActive: analyticsData = {};
-  let localeTotal: analyticsData = {};
+  const detailedAnalyticsEntries: Selectable<DetailedAnalyticsType>[] = await db
+    .selectFrom("detailedAnalytics")
+    .selectAll()
+    .where("day", "=", day)
+    .distinct() // Applies DISTINCT to all selected columns
+    .execute();
+
+  const previousAnalyticsRecords: Selectable<AnalyticsType>[] = await db
+    .selectFrom("analytics")
+    .selectAll()
+    .where("day", "=", day - 1)
+    .execute(); // Fetches all records, original code picks the first if available
+
+  let versionActive: AnalyticsData = {};
+  let versionTotal: AnalyticsData = {};
+  let leagueActive: AnalyticsData = {};
+  let leagueTotal: AnalyticsData = {};
+  let themeActive: AnalyticsData = {};
+  let themeTotal: AnalyticsData = {};
+  let localeActive: AnalyticsData = {};
+  let localeTotal: AnalyticsData = {};
+
   // Makes sure the dictionaries for the analytics are prefilled with all required information
-  if (previousAnalytics.length > 0) {
-    const previousEntry = previousAnalytics[0];
+  if (previousAnalyticsRecords.length > 0) {
+    const previousEntry = previousAnalyticsRecords[0];
+
     versionActive = JSON.parse(previousEntry.versionActive);
     for (const version in versionActive) {
       versionActive[version] = 0;
@@ -63,74 +77,87 @@ export default async function compileAnalytics(day: number) {
       localeTotal[locale] = 0;
     }
   }
-  // Goes through every servers analytics and adds them to the dictionaries
-  for (const entry of analytics) {
+
+  // Goes through every server's analytics and adds them to the dictionaries
+  for (const entry of detailedAnalyticsEntries) {
+    // Version
     if (versionActive[entry.version] === undefined) {
       versionActive[entry.version] = 0;
     }
     versionActive[entry.version] += entry.active;
+
     if (versionTotal[entry.version] === undefined) {
       versionTotal[entry.version] = 0;
     }
     versionTotal[entry.version] += entry.total;
-    const leagueActiveEntry: analyticsData = JSON.parse(entry.leagueActive);
-    for (const league in leagueActiveEntry) {
+
+    // League
+    const entryLeagueActive: AnalyticsData = JSON.parse(entry.leagueActive);
+    for (const league in entryLeagueActive) {
       if (leagueActive[league] === undefined) {
         leagueActive[league] = 0;
       }
-      leagueActive[league] += leagueActiveEntry[league];
+      leagueActive[league] += entryLeagueActive[league];
     }
-    const leagueTotalEntry = JSON.parse(entry.leagueTotal);
-    for (const league in leagueTotalEntry) {
+    const entryLeagueTotal: AnalyticsData = JSON.parse(entry.leagueTotal);
+    for (const league in entryLeagueTotal) {
       if (leagueTotal[league] === undefined) {
         leagueTotal[league] = 0;
       }
-      leagueTotal[league] += leagueTotalEntry[league];
+      leagueTotal[league] += entryLeagueTotal[league];
     }
-    const themeActiveEntry = JSON.parse(entry.themeActive);
-    for (const theme in themeActiveEntry) {
+
+    // Theme
+    const entryThemeActive: AnalyticsData = JSON.parse(entry.themeActive);
+    for (const theme in entryThemeActive) {
       if (themeActive[theme] === undefined) {
         themeActive[theme] = 0;
       }
-      themeActive[theme] += themeActiveEntry[theme];
+      themeActive[theme] += entryThemeActive[theme];
     }
-    const themeTotalEntry = JSON.parse(entry.themeTotal);
-    for (const theme in themeTotalEntry) {
+    const entryThemeTotal: AnalyticsData = JSON.parse(entry.themeTotal);
+    for (const theme in entryThemeTotal) {
       if (themeTotal[theme] === undefined) {
         themeTotal[theme] = 0;
       }
-      themeTotal[theme] += themeTotalEntry[theme];
+      themeTotal[theme] += entryThemeTotal[theme];
     }
-    const localeActiveEntry = JSON.parse(entry.localeActive);
-    for (const locale in localeActiveEntry) {
+
+    // Locale
+    const entryLocaleActive: AnalyticsData = JSON.parse(entry.localeActive);
+    for (const locale in entryLocaleActive) {
       if (localeActive[locale] === undefined) {
         localeActive[locale] = 0;
       }
-      localeActive[locale] += localeActiveEntry[locale];
+      localeActive[locale] += entryLocaleActive[locale];
     }
-    const localeTotalEntry = JSON.parse(entry.localeTotal);
-    for (const locale in localeTotalEntry) {
+    const entryLocaleTotal: AnalyticsData = JSON.parse(entry.localeTotal);
+    for (const locale in entryLocaleTotal) {
       if (localeTotal[locale] === undefined) {
         localeTotal[locale] = 0;
       }
-      localeTotal[locale] += localeTotalEntry[locale];
+      localeTotal[locale] += entryLocaleTotal[locale];
     }
   }
-  await connection.query("DELETE FROM analytics WHERE day=?", [day]);
-  await connection.query(
-    "INSERT INTO analytics (day, versionActive, versionTotal, leagueActive, leagueTotal, themeActive, themeTotal, localeActive, localeTotal) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-    [
-      day,
-      JSON.stringify(versionActive),
-      JSON.stringify(versionTotal),
-      JSON.stringify(leagueActive),
-      JSON.stringify(leagueTotal),
-      JSON.stringify(themeActive),
-      JSON.stringify(themeTotal),
-      JSON.stringify(localeActive),
-      JSON.stringify(localeTotal),
-    ],
-  );
-  await connection.end();
+
+  // Delete existing entry for the current day before inserting the new one
+  await db.deleteFrom("analytics").where("day", "=", day).execute();
+
+  // Insert the newly compiled analytics
+  await db
+    .insertInto("analytics")
+    .values({
+      day: day,
+      versionActive: JSON.stringify(versionActive),
+      versionTotal: JSON.stringify(versionTotal),
+      leagueActive: JSON.stringify(leagueActive),
+      leagueTotal: JSON.stringify(leagueTotal),
+      themeActive: JSON.stringify(themeActive),
+      themeTotal: JSON.stringify(themeTotal),
+      localeActive: JSON.stringify(localeActive),
+      localeTotal: JSON.stringify(localeTotal),
+    })
+    .execute();
+
   return;
 }

@@ -1,7 +1,7 @@
 import Menu from "../components/Menu";
 import { GetServerSideProps, GetServerSidePropsContext } from "next";
 import Head from "next/head.js";
-import connect from "../Modules/database";
+import db from "../Modules/database";
 import { analytics, data, plugins } from "#type/database";
 import React, { useContext, useEffect, useState } from "react";
 import {
@@ -43,6 +43,7 @@ import { authOptions } from "#/pages/api/auth/[...nextauth]";
 import { useRouter } from "next/router";
 import Link from "#components/Link";
 import { MUIThemeCodetoJSONString } from "#components/theme";
+import { sql } from "kysely";
 interface settingsType {
   name: string;
   shortName: string;
@@ -330,13 +331,13 @@ function Analytics({
   };
   // List of all the versions
   const versions: string[] = Object.keys(
-    JSON.parse(analyticsData[analyticsData.length - 1].versionTotal),
+    JSON.parse(analyticsData[analyticsData.length - 1]?.versionTotal || "{}"),
   );
   const leagueList: string[] = Object.keys(
-    JSON.parse(analyticsData[analyticsData.length - 1].leagueTotal),
+    JSON.parse(analyticsData[analyticsData.length - 1]?.leagueTotal || "{}"),
   );
   const locales: string[] = Object.keys(
-    JSON.parse(analyticsData[analyticsData.length - 1].localeTotal),
+    JSON.parse(analyticsData[analyticsData.length - 1]?.localeTotal || "{}"),
   );
   // Calculates colors for things
   const calculateColor = (idx: number, length: number) => {
@@ -549,7 +550,7 @@ function Analytics({
   useEffect(() => {
     let canceled = false;
     setTimeout(async () => {
-      if (canceled) {
+      if (canceled || analyticsData.length == 0) {
         return;
       }
       const loadUntilDay =
@@ -624,7 +625,7 @@ function Analytics({
           value={graphLength}
           min={1}
           step={1}
-          max={analyticsData[analyticsData.length - 1].day - firstDay}
+          max={analyticsData[analyticsData.length - 1]?.day - firstDay}
           onChange={graphLengthChange}
           valueLabelDisplay="auto"
         />
@@ -637,7 +638,7 @@ function Analytics({
           value={graphPrecision}
           min={1}
           step={1}
-          max={analyticsData[analyticsData.length - 1].day - firstDay}
+          max={analyticsData[analyticsData.length - 1]?.day - firstDay}
           onChange={graphPrecisionChange}
           valueLabelDisplay="auto"
         />
@@ -925,16 +926,31 @@ export const getServerSideProps: GetServerSideProps = async (
   }
   if (user.user.admin) {
     // Used to find the amount of historical data to get
-    const connection = await connect();
-    const analytics = await connection.query(
-      "SELECT * FROM analytics WHERE day>(SELECT MAX(day) FROM analytics WHERE day%50=0)-1;",
-    );
-    const firstDay = await connection
-      .query("SELECT MIN(day) as MIN FROM analytics")
-      .then((e) => e[0].MIN);
-    const plugins = await connection.query("SELECT * FROM plugins");
+    const analytics = await db
+      .selectFrom("analytics")
+      .selectAll()
+      .where((eb) =>
+        eb(
+          "day",
+          ">",
+          eb
+            .selectFrom("analytics")
+            .select(eb.fn.max("day").as("max_day"))
+            .where(sql`day % 50`, "=", 0),
+        ),
+      )
+      .execute();
+    const firstDay =
+      (
+        await db
+          .selectFrom("analytics")
+          .select("day")
+          .orderBy("day", "asc")
+          .executeTakeFirst()
+      )?.day ?? 0;
+    const plugins = await db.selectFrom("plugins").selectAll().execute();
     const pluginData: (store | "error")[] = await Promise.all(
-      plugins.map(async (plugin: plugins) => {
+      plugins.map(async (plugin) => {
         const request = await fetch(plugin.url).catch(() => "error");
         if (!(request instanceof Response)) {
           return "error";
@@ -944,10 +960,11 @@ export const getServerSideProps: GetServerSideProps = async (
       }),
     );
     const version = (await import("#/package.json")).default.version;
-    const config = await connection.query(
-      "SELECT * FROM data WHERE value1 LIKE 'config%'",
-    );
-    connection.end();
+    const config = await db
+      .selectFrom("data")
+      .selectAll()
+      .where("value1", "like", "config%")
+      .execute();
     return {
       props: {
         analytics,

@@ -4,8 +4,7 @@ import Head from "next/head";
 import { useState, useEffect, useContext } from "react";
 import { TransferPlayer as Player } from "../../components/Player";
 import { useSession } from "next-auth/react";
-import connect from "../../Modules/database";
-import { leagueSettings } from "#types/database";
+import db from "../../Modules/database";
 import Link from "../../components/Link";
 import {
   Alert,
@@ -26,6 +25,8 @@ import { Box } from "@mui/system";
 import { TranslateContext } from "../../Modules/context";
 import { GetServerSideProps } from "next";
 import { GETResult } from "../api/transfer/[league]";
+import { Selectable } from "kysely";
+import { LeagueSettings } from "#type/db";
 
 // Shows the amount of transfers left
 function TransfersLeft({
@@ -91,7 +92,7 @@ function MainPage({
   maxPrice: number;
   league: number;
   transferOpen: boolean;
-  leagueSettings: leagueSettings;
+  leagueSettings: Selectable<LeagueSettings>;
 }) {
   const positionList = ["gk", "def", "mid", "att"];
   const [players, setPlayers] = useState<string[]>([]);
@@ -372,7 +373,7 @@ function MainPage({
           transferLeft={transferCount < leagueSettings.transfers}
           allOwnership={ownership}
           transferData={transferData}
-          open={leagueSettings.matchdayTransfers || open}
+          open={open || leagueSettings.matchdayTransfers > 0}
           duplicatePlayers={leagueSettings.duplicatePlayers}
           leagueType={leagueSettings.league}
           showHidden={showHidden}
@@ -386,7 +387,7 @@ export default function Home(props: {
   maxPrice: number;
   league: number;
   transferOpen: boolean;
-  leagueSettings: leagueSettings;
+  leagueSettings: Selectable<LeagueSettings>;
 }) {
   const t = useContext(TranslateContext);
   const { archived, leagueName, fantasyEnabled } = props.leagueSettings;
@@ -435,19 +436,21 @@ export default function Home(props: {
 }
 
 export const getServerSideProps: GetServerSideProps = async (ctx) => {
-  const connection = await connect();
+  const leagueID = parseInt(String(ctx?.params?.league));
   // Gets the amount of allowed transfers
-  const league: string = await connection
-    .query("SELECT league FROM leagueSettings WHERE leagueID=?", [
-      ctx?.params?.league,
-    ])
-    .then((result) => (result.length > 0 ? result[0].league : "Bundesliga"));
-  const maxPrice = await connection
-    .query(
-      "SELECT value FROM players WHERE league=? ORDER BY value DESC limit 1",
-      [league],
-    )
-    .then((res) => (res.length > 0 ? res[0].value : 0));
-  connection.end();
+  const league = await db
+    .selectFrom("leagueSettings")
+    .selectAll()
+    .where("leagueID", "=", leagueID)
+    .select("league")
+    .executeTakeFirst()
+    .then((e) => (e ? e.league : "Bundesliga"));
+  const maxPrice = await db
+    .selectFrom("players")
+    .select("value")
+    .orderBy("value", "desc")
+    .where("league", "=", league)
+    .executeTakeFirst()
+    .then((e) => (e ? e.value : 0));
   return await redirect(ctx, { maxPrice });
 };
