@@ -262,7 +262,7 @@ export interface Users {
   password: string;
   theme: string | null;
   throttle: Generated<number>;
-  username: string;
+  username: Generated<string>;
 }
 
 export interface DB {
