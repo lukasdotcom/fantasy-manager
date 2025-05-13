@@ -53,13 +53,14 @@ export default async function handler(
         eb.or(positions.map((e) => eb("position", "=", e))),
       );
     }
-    if (req.query.showHidden === "true") {
+    if (req.query.showHidden !== "true") {
       query = query.where((eb) =>
         eb.or([
-          eb("exists", "=", 1),
+          eb("players.exists", "=", 1),
           eb.exists(
             eb
               .selectFrom("squad")
+              .select("squad.playeruid")
               .innerJoin(
                 "leagueSettings",
                 "squad.leagueID",
