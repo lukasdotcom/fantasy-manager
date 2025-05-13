@@ -136,10 +136,11 @@ export async function up(db: Kysely<unknown>): Promise<void> {
     .addColumn("active", "boolean", (col) => col.defaultTo(false).notNull())
     .addColumn("inactiveDays", "integer", (col) => col.defaultTo(0).notNull())
     .execute();
-  await sql`INSERT INTO leagueSettings (leagueName, startMoney, transfers, duplicatePlayers, starredPercentage, league,
+  await sql`INSERT INTO leagueSettings (leagueName, leagueID, startMoney, transfers, duplicatePlayers, starredPercentage, league,
                                         archived, matchdayTransfers, fantasyEnabled, predictionsEnabled, predictWinner,
                                         predictDifference, predictExact, top11, active, inactiveDays)
             SELECT leagueName,
+                   leagueID,
                    COALESCE(startMoney, 150000000),
                    COALESCE(transfers, 6),
                    COALESCE(duplicatePlayers, 1),
