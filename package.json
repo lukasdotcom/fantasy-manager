@@ -61,7 +61,7 @@
     "kysely-codegen": "0.18.3",
     "prettier": "3.5.3",
     "ts-jest": "29.3.4",
-    "typescript": "5.7.2",
+    "typescript": "5.8.3",
     "wait-on": "8.0.3"
   },
   "imports": {
