@@ -1,13 +1,13 @@
 import MuiLink from "@mui/material/Link";
 import NextLink from "next/link";
-import { forwardRef } from "react";
+import { forwardRef, ReactElement } from "react";
 interface Props {
   // The attributes for styling
   styled?: boolean;
   color?: string;
   underline?: "hover" | "none" | "always";
   href: string;
-  children: JSX.Element | string;
+  children: ReactElement | string;
   disableNext?: boolean;
   // Some attributes that links can use
   rel?: string;

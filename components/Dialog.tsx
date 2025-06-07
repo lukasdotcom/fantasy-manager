@@ -1,7 +1,7 @@
 import { Dialog, DialogTitle, Icon, IconButton } from "@mui/material";
-import { MouseEventHandler } from "react";
+import { MouseEventHandler, ReactNode } from "react";
 interface Props {
-  children: JSX.Element;
+  children: ReactNode;
   onClose: MouseEventHandler;
   title: string;
   open: boolean;
