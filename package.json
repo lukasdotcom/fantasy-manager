@@ -62,7 +62,7 @@
     "prettier": "3.5.3",
     "ts-jest": "29.3.4",
     "typescript": "5.7.2",
-    "wait-on": "8.0.1"
+    "wait-on": "8.0.3"
   },
   "imports": {
     "#/*": "./*.ts",
