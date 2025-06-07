@@ -86,7 +86,7 @@ export default function HistoricalView({
       <h1>{title_text}</h1>
       <Grid container spacing={2}>
         {predictions.map((e) => (
-          <Grid key={e.home_team} item lg={4} xs={6}>
+          <Grid size={{ lg: 4, xs: 6 }} key={e.home_team}>
             <Game
               league={leagueID}
               readOnly={user !== current_userid || !!archived}
