@@ -28,7 +28,7 @@
     "@types/better-sqlite3": "7.6.13",
     "@emotion/react": "11.14.0",
     "@emotion/styled": "11.14.0",
-    "@mui/material": "6.2.1",
+    "@mui/material": "6.4.12",
     "bcrypt": "6.0.0",
     "better-sqlite3": "11.10.0",
     "chart.js": "4.4.9",
