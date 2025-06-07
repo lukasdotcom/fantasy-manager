@@ -9,6 +9,7 @@ import { calcPointsType } from "./calcPoints";
 import plugins from "./data"; // This is the compiled plugins object
 import { downloadPicture } from "./pictures";
 import { sql } from "kysely";
+import fs from "fs";
 
 // Used to update all the data
 export async function updateData(
@@ -961,7 +962,13 @@ async function endMatchday(league: string): Promise<void> {
         path: "/download",
       }),
     },
-  ).catch((err) => console.error("Failed to revalidate /download:", err));
+  ).catch((err) => {
+    console.error(
+      "Failed to revalidate /download (If the server has not started yet this is expected):",
+      err,
+    );
+    fs.closeSync(fs.openSync("revalidate", "w"));
+  });
 
   const nowTime = Math.floor(Date.now() / 1000);
   await db.deleteFrom("futureClubs").where("gameStart", "<", nowTime).execute();
