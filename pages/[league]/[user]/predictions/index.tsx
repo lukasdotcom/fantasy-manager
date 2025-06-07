@@ -86,8 +86,6 @@ export default function HistoricalView({
       <h1>{title_text}</h1>
       <Grid container spacing={2}>
         {predictions.map((e) => (
-          // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-          // @ts-expect-error
           <Grid container size={{ lg: 4, xs: 6 }} key={e.home_team}>
             <Game
               league={leagueID}

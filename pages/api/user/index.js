@@ -114,6 +114,7 @@ export default async function handler(req, res) {
         const anyLeagues =
           (await db
             .selectFrom("leagueUsers")
+            .selectAll()
             .where("user", "=", id)
             .executeTakeFirst()) !== undefined;
         if (anyLeagues) {
