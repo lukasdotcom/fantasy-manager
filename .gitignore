@@ -58,3 +58,6 @@ scripts/data.ts
 
 # Ignores downloaded pictures
 players
+
+# Ignore the revalidate page
+revalidate
