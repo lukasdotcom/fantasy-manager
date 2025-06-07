@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "export NODE_ENV=development APP_ENV=development && npm run start2:part1 && npm run dev:part2",
-    "dev:part2": "ts-node --project=tsconfig2.json scripts/entrypoint.ts & next dev",
+    "dev:part2": "ts-node --project=tsconfig2.json scripts/entrypoint.ts & next dev --turbopack",
     "build": "export NODE_ENV=production APP_ENV=production && npm run start2:part1 && next build",
     "start": "export NODE_ENV=production APP_ENV=production && npm run start2",
     "test": "export NODE_ENV=test APP_ENV=test && ts-node --project=tsconfig2.json scripts/jestSetup.ts && jest --watch",
