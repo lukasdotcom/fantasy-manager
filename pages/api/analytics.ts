@@ -67,7 +67,8 @@ export default async function handler(
       }
       leagueTotal = JSON.stringify(tempLeagueTotal);
     }
-    db.insertInto("detailedAnalytics")
+    await db
+      .insertInto("detailedAnalytics")
       .values({
         serverID,
         day,
@@ -93,7 +94,8 @@ export default async function handler(
           localeActive,
           localeTotal,
         }),
-      );
+      )
+      .execute();
     res.status(200).end();
   } else {
     res.status(400).end("Method does not exist");
