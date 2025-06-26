@@ -31,7 +31,7 @@
     "@mui/material": "7.1.1",
     "bcrypt": "6.0.0",
     "better-sqlite3": "11.10.0",
-    "chart.js": "4.4.9",
+    "chart.js": "4.5.0",
     "csv-stringify": "6.5.2",
     "dotenv": "16.5.0",
     "kysely": "0.27.6",
