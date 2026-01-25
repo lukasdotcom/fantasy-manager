@@ -100,11 +100,11 @@ const options = {
       if (account.provider === "google" || account.provider === "github") {
         // Checks if the user has already registered and if no then the user is created
         const registered =
-          await sql`SELECT * FROM users WHERE ${account.provider}=${profile.email}`
+          await sql`SELECT * FROM users WHERE ${sql.raw(account.provider)}=${profile.email}`
             .execute(db)
             .then((e) => e.rows.length > 0);
         if (!registered) {
-          await sql`INSERT INTO users (${account.provider}, username, password) VALUES (${profile.email}, ${profile.name}, '')`.execute(
+          await sql`INSERT INTO users (${sql.raw(account.provider)}, username, password) VALUES (${profile.email}, ${profile.name}, '')`.execute(
             db,
           );
         }
@@ -125,7 +125,7 @@ const options = {
         // Gets the id from the database
         if (account.provider === "google" || account.provider === "github") {
           token.name =
-            await sql`SELECT id FROM users WHERE ${account.provider}=${token.email}`
+            await sql`SELECT id FROM users WHERE ${sql.raw(account.provider)}=${token.email}`
               .execute(db)
               .then((res) => (res.rows.length > 0 ? res.rows[0].id : 0));
         }
