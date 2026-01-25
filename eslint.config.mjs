@@ -29,6 +29,7 @@ export default [
       "!cypress/e2e/*.cy.js",
       "**/next.config.js",
       "eslint.config.mjs",
+      "next-env.d.ts",
     ],
   },
   ...compat.extends(
