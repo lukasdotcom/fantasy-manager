@@ -17,7 +17,7 @@ jobs:
       DOCKER_TARGET_PLATFORM: linux/arm64,linux/amd64
     steps:
       - name: Checkout the code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       # https://github.com/docker/setup-qemu-action
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
