@@ -67,7 +67,7 @@ docker-compose up
 
 Required Tools:
 
-- [Nodejs](https://nodejs.org/en/download/) ≥ 18. v20.x is recommended, but all LTS node versions are supported.
+- [Nodejs](https://nodejs.org/en/download/) ≥ 18. v24.x is recommended, but all LTS node versions are supported.
 - [Git](https://git-scm.com/downloads)
 
 1. First clone this git repository
