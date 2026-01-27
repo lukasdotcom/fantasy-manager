@@ -500,6 +500,7 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
     player?.exists === 0 &&
     (await db
       .selectFrom("data")
+      .selectAll()
       .where("value1", "=", "locked" + league)
       .executeTakeFirst()) !== undefined
   ) {
