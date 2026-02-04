@@ -14,7 +14,7 @@ export default async function handler(
   if (
     (await db
       .selectFrom("plugins")
-      .where("name", "=", "league")
+      .where("name", "=", league)
       .select("name")
       .executeTakeFirst()) === undefined
   ) {
