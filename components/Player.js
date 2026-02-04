@@ -19,10 +19,10 @@ import {
   TableRow,
   TextField,
   alpha,
+  useTheme,
 } from "@mui/material";
 import Dialog from "./Dialog";
 import { UserChip } from "./Username";
-import { useTheme } from "@emotion/react";
 // Used to create the layout for a player card that shows some simple details on a player just requires the data of the player to be passed into it and you can pass a custom button as a child of the component
 // extraText is shown in parenthesis next to the player name
 // condensed is which type of condensed view should be shown (transfer, squad, or historical)
