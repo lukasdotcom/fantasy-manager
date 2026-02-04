@@ -30,19 +30,15 @@ function InternalPlayer({ data, children, starred, extraText, condensed }) {
   const t = useContext(TranslateContext);
   const [countdown, setCountown] = useState(0);
   useEffect(() => {
-    const id = setInterval(
-      () => setCountown((countdown) => countdown - 1),
-      60000,
-    );
-    return () => {
-      clearInterval(id);
-    };
-  }, []);
-  // Makes sure that the countdown is up to date
-  useEffect(() => {
-    setCountown(
-      data.game ? Math.ceil((data.game.gameStart - Date.now() / 1000) / 60) : 0,
-    );
+    const check = () =>
+      setCountown(
+        data.game
+          ? Math.ceil((data.game.gameStart - Date.now() / 1000) / 60)
+          : 0,
+      );
+    queueMicrotask(check);
+    const id = setInterval(check, 10000);
+    return () => clearInterval(id);
   }, [data]);
   const theme = useTheme();
   const dark = theme.palette.mode === "dark";

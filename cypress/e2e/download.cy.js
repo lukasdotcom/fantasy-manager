@@ -42,7 +42,6 @@ describe("Download Bundesliga data as JSON and CSV", () => {
   });
 
   it("downloads JSON and verifies format", () => {
-    cy.visit("http://localhost:3000");
     cy.request({
       method: "GET",
       url: `/api/download`,
@@ -82,7 +81,6 @@ describe("Download Bundesliga data as JSON and CSV", () => {
   });
 
   it("downloads CSV and verifies format", () => {
-    cy.visit("http://localhost:3000");
     cy.request({
       method: "GET",
       url: `/api/download`,

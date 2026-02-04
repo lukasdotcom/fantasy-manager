@@ -1,6 +1,18 @@
 import { NotifyContext, TranslateContext } from "#/Modules/context";
 import { useContext, useEffect, useState } from "react";
 import { TextField } from "@mui/material";
+
+function GameEndHeader({ gameEnd }: { gameEnd: number }) {
+  const t = useContext(TranslateContext);
+  const [isPastGameEnd, setIsPastGameEnd] = useState(false);
+  useEffect(() => {
+    const check = () => setIsPastGameEnd(Date.now() / 1000 > gameEnd);
+    queueMicrotask(check);
+    const id = setInterval(check, 10000);
+    return () => clearInterval(id);
+  }, [gameEnd]);
+  return <h4>{isPastGameEnd ? t("Final Scores") : t("Current Scores")}</h4>;
+}
 export interface predictions {
   home_team: string;
   home_team_name: string | undefined;
@@ -63,18 +75,14 @@ export function Game({
       notify(t(await response.text()), response.ok ? "success" : "error");
     });
   }
-  const [countdown, setCountown] = useState<number>(
-    Math.ceil((gameStart - Date.now() / 1000) / 60),
-  );
+  const [countdown, setCountown] = useState<number>(0);
   useEffect(() => {
-    const id = setInterval(
-      () => setCountown((countdown) => countdown - 1),
-      60000,
-    );
-    return () => {
-      clearInterval(id);
-    };
-  }, []);
+    const check = () =>
+      setCountown(Math.ceil((gameStart - Date.now() / 1000) / 60));
+    queueMicrotask(check);
+    const id = setInterval(check, 10000);
+    return () => clearInterval(id);
+  }, [gameStart]);
   const t = useContext(TranslateContext);
   const home_team_text = home_team_name || home_team;
   const away_team_text = away_team_name || away_team;
@@ -129,11 +137,7 @@ export function Game({
               </p>
             </>
           )}
-          <h4>
-            {Date.now() / 1000 > gameEnd
-              ? t("Final Scores")
-              : t("Current Scores")}
-          </h4>
+          <GameEndHeader gameEnd={gameEnd} />
           <p>
             {home_score} - {away_score}
           </p>

@@ -241,7 +241,7 @@ function Leagues({ leagues }: LeaguesProps) {
   };
   // Makes sure to get the league data on the mount
   useEffect(() => {
-    getLeagueData();
+    queueMicrotask(() => getLeagueData());
   }, []);
   const [favoriteLeague, setFavoriteLeague] = useState<
     LeagueListPart | undefined
@@ -255,11 +255,11 @@ function Leagues({ leagues }: LeaguesProps) {
     const newFavoriteLeague = leagueList.leagues.filter(
       (e) => e.leagueID === session.user.favoriteLeague,
     );
-    setFavoriteLeague(
+    const newVal =
       newFavoriteLeague.length > 0
         ? JSON.parse(JSON.stringify(newFavoriteLeague[0]))
-        : undefined,
-    );
+        : undefined;
+    queueMicrotask(() => setFavoriteLeague(newVal));
   }, [session, leagueList, favoriteLeague]);
   // Used to update the favorite
   async function updateFavorite(val: LeagueListPart | undefined) {
