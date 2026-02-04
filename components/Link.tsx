@@ -38,8 +38,8 @@ const Home = forwardRef<HTMLAnchorElement, Props>(function Home(props, ref) {
     );
   } else {
     return (
-      <NextLink ref={ref} href={href} legacyBehavior={true}>
-        <MuiLink {...other} href={href} sx={{ cursor: "pointer" }}>
+      <NextLink ref={ref} href={href}>
+        <MuiLink component="span" {...other} sx={{ cursor: "pointer" }}>
           {children}
         </MuiLink>
       </NextLink>

@@ -448,7 +448,7 @@ describe("Invite User into league and change some league Settings and run throug
       "Robert Lewandowski",
     );
     cy.get(
-      ":nth-child(2) > :nth-child(3) > [style='width: 70%;'] > :nth-child(1) > .MuiTypography-root",
+      ":nth-child(2) > :nth-child(3) > [style='width: 70%;'] > :nth-child(1) > a >.MuiTypography-root",
     ).contains("Robert Lewandowski");
     cy.contains("19.7 M");
     matchdays.push({ invite1: user1Money, invite2: user2Money });
