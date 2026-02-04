@@ -21,9 +21,11 @@ export default async function handler(
   switch (req.method) {
     case "POST":
       // Used to edit or create a plugin
-      const {
-        body: { url = "", enabled = 0, settings = "{}" },
+      let {
+        // eslint-disable-next-line prefer-const
+        body: { url = "", enabled = false, settings = "{}" },
       } = req;
+      enabled = enabled ? 1 : 0;
       // Check if the plugin exists
       const plugin = await db
         .selectFrom("plugins")
