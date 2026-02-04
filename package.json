@@ -1,6 +1,6 @@
 {
   "name": "fantasy-manager",
-  "version": "1.22.2",
+  "version": "1.22.3",
   "private": true,
   "scripts": {
     "dev": "export NODE_ENV=development APP_ENV=development && npm run start2:part1 && npm run dev:part2",
