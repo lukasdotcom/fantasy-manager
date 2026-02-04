@@ -25,10 +25,10 @@
     "dbtypes:check": "kysely-codegen --url ./test.db --out-file ./types/db.ts --verify --log-level=error"
   },
   "dependencies": {
-    "@types/better-sqlite3": "^7.6.13",
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.1",
     "@mui/material": "^7.1.1",
+    "@types/better-sqlite3": "^7.6.13",
     "bcrypt": "^6.0.0",
     "better-sqlite3": "^12.0.0",
     "chart.js": "^4.5.0",
@@ -54,6 +54,7 @@
     "@types/react": "^19.1.6",
     "@typescript-eslint/eslint-plugin": "^8.35.0",
     "@typescript-eslint/parser": "^8.35.0",
+    "babel-plugin-react-compiler": "^1.0.0",
     "cypress": "^15.0.0",
     "eslint": "^9.29.0",
     "eslint-config-next": "^16.1.6",

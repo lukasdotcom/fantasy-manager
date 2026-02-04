@@ -7,9 +7,7 @@ describe("Create Predictions league and do some simple predictions.", () => {
   // Used to signup change username and password and login again
   it("invite", () => {
     // Signs in
-    cy.visit("http://localhost:3000");
-    cy.get("#login").click();
-    cy.contains("Click here for creating an account").click();
+    cy.visit("/signup");
     cy.get("#username").type("Predictions 1");
     cy.get("#password").type("password");
     cy.get(".center > .MuiButtonBase-root").click();

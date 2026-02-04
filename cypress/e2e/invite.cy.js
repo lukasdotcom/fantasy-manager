@@ -12,9 +12,7 @@ describe("Invite User into league and change some league Settings and run throug
     let user2;
     let matchdays = [];
     // Signs in
-    cy.visit("http://localhost:3000");
-    cy.get("#login").click();
-    cy.contains("Click here for creating an account").click();
+    cy.visit("/signup");
     cy.get("#username").type("Invite 1");
     cy.get("#password").type("password");
     cy.get(".center > .MuiButtonBase-root").click();
