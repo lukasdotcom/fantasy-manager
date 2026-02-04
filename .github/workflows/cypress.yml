@@ -15,9 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       NODE_ENV: test
-      SQLITE:
-        db.db
-        # See supported Node.js release schedule at https://nodejs.org/en/about/releases/
+      SQLITE: db.db
     steps:
       - uses: actions/checkout@v6
       - name: Use Node.js

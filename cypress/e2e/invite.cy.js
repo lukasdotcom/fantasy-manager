@@ -59,11 +59,11 @@ describe("Invite User into league and change some league Settings and run throug
     // Signs into User 2 which will join the league through the invite
     cy.get("#logout").click();
     // Checks invalid invite
-    cy.visit("http://localhost:3000/api/invite/invite2", {
+    cy.visit("/api/invite/invite2", {
       failOnStatusCode: false,
     });
     cy.visit(
-      "http://localhost:3000/signup?callbackUrl=http%3A%2F%2Flocalhost%3A3000%2Fapi%2Finvite%2Finvite2",
+      "/signup?callbackUrl=http%3A%2F%2Flocalhost%3A3000%2Fapi%2Finvite%2Finvite2",
     ); // This line is because cypress is weird and removes the callbackUrl from the url
     cy.get("#username").type("Invite 2");
     cy.get("#password").type("password");
@@ -74,7 +74,7 @@ describe("Invite User into league and change some league Settings and run throug
       (cookie) => (user2 = cookie.value),
     );
     // Joins the league
-    cy.visit("http://localhost:3000/api/invite/invite1");
+    cy.visit("/api/invite/invite1");
     cy.contains("Admin Panel").should("not.exist");
     // Checks if the annoucement exists
     cy.contains("Very great description for this announcement");

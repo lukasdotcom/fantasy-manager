@@ -7,7 +7,7 @@ describe("User", () => {
   // Used to signup change username and password and login again
   it("signup", () => {
     // Signs in
-    cy.visit("http://localhost:3000");
+    cy.visit("/");
     cy.get("#login").click();
     cy.contains("Click here for creating an account").click();
     cy.get("#username").type("Sample User");
