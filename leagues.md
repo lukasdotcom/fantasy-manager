@@ -7,10 +7,11 @@ Not every league has perfect support. This is the levels of support for all the 
 - :3rd_place_medal: means that the league has no support anymore or is done.
 - :new: means that the league is new and may have some unforeseen bugs.
 
-| League     | Support           |
-| ---------- | ----------------- |
-| Bundesliga | :1st_place_medal: |
-| EPL        | :2nd_place_medal: |
+| League         | Support           |
+| -------------- | ----------------- |
+| Bundesliga     | :2nd_place_medal: |
+| EPL            | :2nd_place_medal: |
+| World Cup 2026 | :1st_place_medal: |
 
 # How to add another league
 
