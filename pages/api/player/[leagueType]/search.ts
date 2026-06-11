@@ -38,6 +38,7 @@ export default async function handler(
         ]),
       )
       .where("players.league", "=", league)
+      .where("clubs.league", "=", league)
       .limit(limit);
     // Creates the sql for all the positions
     let positions = ["att", "mid", "def", "gk"];
