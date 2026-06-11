@@ -92,6 +92,11 @@ async function downloadPictureURL(url: string, id: number): Promise<void> {
       ),
     );
     await rename(tempFilePath, picturePath(id, true));
+    await db
+      .updateTable("pictures")
+      .set({ downloaded: 1 })
+      .where("id", "=", id)
+      .execute();
     console.log(`Finished downloading picture with id: ${id}`);
   } catch (error) {
     console.error(`Failed to download picture with id: ${id}. Error: ${error}`);
