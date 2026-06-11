@@ -9,6 +9,7 @@ interface Round {
 }
 
 export enum Status {
+  Playing = "playing",
   Scheduled = "scheduled",
   Finished = "finished",
 }
@@ -32,14 +33,21 @@ export interface Tournament {
   awaySquadName: string;
   homeSquadAbbr: string;
   awaySquadAbbr: string;
-  homeScore: null | number;
-  homePenaltyScore: null | number;
-  homeGoalScorersAssists: null;
-  awayScore: null | number;
-  awayPenaltyScore: null | number;
-  awayGoalScorersAssists: null;
+  homeScore: number | null;
+  homePenaltyScore: number | null;
+  homeGoalScorersAssists: GoalScorersAssist[] | null;
+  awayScore: number | null;
+  awayPenaltyScore: number | null;
+  awayGoalScorersAssists: GoalScorersAssist[] | null;
+}
+
+export interface GoalScorersAssist {
+  playerId: number;
+  assistId: null;
 }
 
 export enum Period {
+  FirstHalf = "first_half",
+  SecondHalf = "second_half",
   PreMatch = "pre_match",
 }
