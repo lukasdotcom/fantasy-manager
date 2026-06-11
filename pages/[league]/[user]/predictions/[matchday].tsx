@@ -37,6 +37,7 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
       .select("matchday")
       .where("leagueID", "=", league)
       .where("user", "=", user)
+      .where("time", "is not", null)
       .orderBy("matchday", "desc")
       .executeTakeFirst()
       .then((e) => (e ? e.matchday : 0)),
