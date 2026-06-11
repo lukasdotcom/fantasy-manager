@@ -86,9 +86,12 @@ export default function HistoricalView({
       <h1>{title_text}</h1>
       <Grid container spacing={2}>
         {predictions.map((e) => (
-          <Grid container size={{ lg: 4, xs: 6 }} key={e.home_team}>
+          <Grid size={{ xl: 3, lg: 4, xs: 6 }} key={e.home_team}>
             <Game
               league={leagueID}
+              predictWinner={leagueSettings.predictWinner}
+              predictDifference={leagueSettings.predictDifference}
+              predictExact={leagueSettings.predictExact}
               readOnly={user !== current_userid || !!archived}
               {...e}
             />
@@ -146,6 +149,7 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
       .select("matchday")
       .where("leagueID", "=", league)
       .where("user", "=", user)
+      .where("time", "is not", null)
       .orderBy("matchday", "desc")
       .executeTakeFirst()
       .then((e) => (e ? e.matchday : 0)),

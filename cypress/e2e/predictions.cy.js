@@ -1,4 +1,24 @@
 describe("Create Predictions league and do some simple predictions.", () => {
+  function predictionCard(matchup) {
+    return cy.contains(matchup).closest(".MuiPaper-root");
+  }
+
+  function enterPrediction(matchup, home, away) {
+    predictionCard(matchup).within(() => {
+      cy.get("input").eq(0).clear().type(String(home));
+      cy.get("input").eq(1).clear().type(String(away));
+    });
+  }
+
+  function assertPredictionScores(matchup, prediction, actual) {
+    predictionCard(matchup).within(() => {
+      cy.contains("Predictions").parent().contains(prediction);
+      cy.contains(/Final Scores|Current Scores/)
+        .parent()
+        .contains(actual);
+    });
+  }
+
   before(() => {
     cy.exec(
       "export APP_ENV=test; ts-node --project=./tsconfig2.json cypress/e2e/predictions1.ts",
@@ -27,42 +47,18 @@ describe("Create Predictions league and do some simple predictions.", () => {
     cy.contains("Save admin settings").click();
     cy.contains("Predictions").click();
     cy.contains("RBL").should("not.exist");
-    cy.contains("FCB - WOB").parent().children(":nth-child(2)").type("3");
-    cy.contains("FCB - WOB").parent().children(":nth-child(3)").type("0");
-    cy.contains("BVB - BSC").parent().children(":nth-child(2)").type("2");
-    cy.contains("BVB - BSC").parent().children(":nth-child(3)").type("2");
-    cy.contains("SGE - M05").parent().children(":nth-child(2)").type("4");
-    cy.contains("SGE - M05").parent().children(":nth-child(3)").type("0");
+    enterPrediction("FCB - WOB", 3, 0);
+    enterPrediction("BVB - BSC", 2, 2);
+    enterPrediction("SGE - M05", 4, 0);
     cy.exec(
       "export APP_ENV=test; ts-node --project=./tsconfig2.json cypress/e2e/predictions2.ts",
     );
     cy.contains("Standings").click();
     cy.get(".MuiTableBody-root > :nth-child(1) > :nth-child(2)").contains("10");
     cy.contains("Predictions").click();
-    cy.contains("FCB - WOB")
-      .parent()
-      .children(":nth-child(3)")
-      .contains("3 - 0");
-    cy.contains("FCB - WOB")
-      .parent()
-      .children(":nth-child(5)")
-      .contains("5 - 1");
-    cy.contains("BVB - BSC")
-      .parent()
-      .children(":nth-child(3)")
-      .contains("2 - 2");
-    cy.contains("BVB - BSC")
-      .parent()
-      .children(":nth-child(5)")
-      .contains("2 - 2");
-    cy.contains("SGE - M05")
-      .parent()
-      .children(":nth-child(3)")
-      .contains("4 - 0");
-    cy.contains("SGE - M05")
-      .parent()
-      .children(":nth-child(5)")
-      .contains("5 - 1");
+    assertPredictionScores("FCB - WOB", "3 - 0", "5 - 1");
+    assertPredictionScores("BVB - BSC", "2 - 2", "2 - 2");
+    assertPredictionScores("SGE - M05", "4 - 0", "5 - 1");
     cy.exec(
       "export APP_ENV=test; ts-node --project=./tsconfig2.json cypress/e2e/predictions3.ts",
     );
@@ -70,29 +66,8 @@ describe("Create Predictions league and do some simple predictions.", () => {
     cy.get(".MuiPagination-ul > :nth-child(2) > .MuiButtonBase-root").click();
     cy.get("#predictions0").click();
     // Confirms that the historical predictions and game scores are stored directly
-    cy.contains("FCB - WOB")
-      .parent()
-      .children(":nth-child(3)")
-      .contains("3 - 0");
-    cy.contains("FCB - WOB")
-      .parent()
-      .children(":nth-child(5)")
-      .contains("5 - 1");
-    cy.contains("BVB - BSC")
-      .parent()
-      .children(":nth-child(3)")
-      .contains("2 - 2");
-    cy.contains("BVB - BSC")
-      .parent()
-      .children(":nth-child(5)")
-      .contains("2 - 2");
-    cy.contains("SGE - M05")
-      .parent()
-      .children(":nth-child(3)")
-      .contains("4 - 0");
-    cy.contains("SGE - M05")
-      .parent()
-      .children(":nth-child(5)")
-      .contains("5 - 1");
+    assertPredictionScores("FCB - WOB", "3 - 0", "5 - 1");
+    assertPredictionScores("BVB - BSC", "2 - 2", "2 - 2");
+    assertPredictionScores("SGE - M05", "4 - 0", "5 - 1");
   });
 });
