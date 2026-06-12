@@ -145,10 +145,11 @@ export function Game({
   const [home, setHome] = useState(home_prediction);
   const [away, setAway] = useState(away_prediction);
   const notify = useContext(NotifyContext);
-  const [isPastGameEnd, setIsPastGameEnd] = useState(true);
+  const [isPastGameEnd, setIsPastGameEnd] = useState(
+    () => Date.now() / 1000 > gameEnd,
+  );
   useEffect(() => {
     const check = () => setIsPastGameEnd(Date.now() / 1000 > gameEnd);
-    queueMicrotask(check);
     const id = setInterval(check, 10000);
     return () => clearInterval(id);
   }, [gameEnd]);
@@ -180,11 +181,12 @@ export function Game({
       notify(t(await response.text()), response.ok ? "success" : "error");
     });
   }
-  const [countdown, setCountown] = useState<number>(0);
+  const [countdown, setCountown] = useState<number>(() =>
+    Math.ceil((gameStart - Date.now() / 1000) / 60),
+  );
   useEffect(() => {
     const check = () =>
       setCountown(Math.ceil((gameStart - Date.now() / 1000) / 60));
-    queueMicrotask(check);
     const id = setInterval(check, 10000);
     return () => clearInterval(id);
   }, [gameStart]);
