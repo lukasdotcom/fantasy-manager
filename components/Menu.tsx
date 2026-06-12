@@ -4,6 +4,7 @@ import {
   MenuItem,
   Container,
   Menu,
+  MenuList,
   Typography,
   IconButton,
   Toolbar,
@@ -25,7 +26,7 @@ function MenuItems({ pages, handleCloseNavMenu }: MenuItemsInterface) {
       {pages.map((page) => (
         <Link styled={false} href={page.link} key={page.name}>
           <MenuItem onClick={handleCloseNavMenu}>
-            <Typography textAlign="center">{page.name}</Typography>
+            <Typography sx={{ textAlign: "center" }}>{page.name}</Typography>
           </MenuItem>
         </Link>
       ))}
@@ -134,7 +135,9 @@ const Layout = ({ league }: MainInterface) => {
               },
             }}
           >
-            {MenuItemsLarge}
+            <MenuList sx={{ display: "flex", flexDirection: "row", p: 0 }}>
+              {MenuItemsLarge}
+            </MenuList>
           </Box>
 
           <Box sx={{ flexGrow: 0 }}>

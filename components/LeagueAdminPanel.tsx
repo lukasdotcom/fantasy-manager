@@ -162,8 +162,10 @@ function AdminPanelAdmin({
             variant="outlined"
             size="small"
             helperText={t("Point boost for starred players")}
-            InputProps={{
-              endAdornment: <InputAdornment position="end">%</InputAdornment>,
+            slotProps={{
+              input: {
+                endAdornment: <InputAdornment position="end">%</InputAdornment>,
+              },
             }}
             type="number"
             onChange={(val) => {
@@ -259,14 +261,18 @@ function AdminPanelAdmin({
         options={users}
         freeSolo
         value={users.filter((e) => e.admin)}
-        renderTags={(value, getTagProps) =>
-          value.map((option: AdminUserData, index) => (
-            <UserChip
-              userid={option.user}
-              {...getTagProps({ index })}
-              key={option.user}
-            />
-          ))
+        renderValue={(value, getItemProps) =>
+          value.map((option, index) => {
+            const userid =
+              typeof option === "string" ? parseInt(option) : option.user;
+            return (
+              <UserChip
+                userid={userid}
+                {...getItemProps({ index })}
+                key={userid}
+              />
+            );
+          })
         }
         onChange={(
           e: SyntheticEvent<Element, Event>,

@@ -27,7 +27,11 @@ function ScoreRow({
   return (
     <Box sx={{ py: 1 }}>
       {label && (
-        <Typography variant="overline" color="text.secondary" display="block">
+        <Typography
+          variant="overline"
+          color="text.secondary"
+          sx={{ display: "block" }}
+        >
           {label}
         </Typography>
       )}
@@ -212,7 +216,7 @@ export function Game({
 
   return (
     <Paper elevation={1} sx={{ p: 2, height: "100%" }}>
-      <Typography fontWeight={600}>
+      <Typography sx={{ fontWeight: 600 }}>
         {countdown > 0
           ? t("{home_team} - {away_team} in {day} D {hour} H {minute} M ", {
               home_team: home_team_text,
