@@ -361,12 +361,12 @@ export async function updateData(
       const previousDataGameEnd = previousDbClub?.gameEnd ?? Infinity;
 
       clubDone = !(
-        Math.min(clubDataFromPlugin.gameStart, previousDataGameStart) >=
+        Math.max(clubDataFromPlugin.gameStart, previousDataGameStart) >=
           currentTime || newTransfer
       );
       gameDone =
         lastUpdateTimestamp >
-        Math.min(previousDataGameEnd, clubDataFromPlugin.gameEnd);
+        Math.max(previousDataGameEnd, clubDataFromPlugin.gameEnd);
       const home =
         clubDataFromPlugin.home !== undefined
           ? clubDataFromPlugin.home

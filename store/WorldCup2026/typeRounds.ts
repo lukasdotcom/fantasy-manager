@@ -11,7 +11,7 @@ interface Round {
 export enum Status {
   Playing = "playing",
   Scheduled = "scheduled",
-  Finished = "finished",
+  Finished = "completed",
 }
 
 export interface Tournament {

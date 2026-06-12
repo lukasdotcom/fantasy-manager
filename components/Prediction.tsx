@@ -145,7 +145,7 @@ export function Game({
   const [home, setHome] = useState(home_prediction);
   const [away, setAway] = useState(away_prediction);
   const notify = useContext(NotifyContext);
-  const [isPastGameEnd, setIsPastGameEnd] = useState(false);
+  const [isPastGameEnd, setIsPastGameEnd] = useState(true);
   useEffect(() => {
     const check = () => setIsPastGameEnd(Date.now() / 1000 > gameEnd);
     queueMicrotask(check);
