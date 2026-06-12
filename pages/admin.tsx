@@ -188,19 +188,17 @@ function LeaguePlugin({ data, store, version }: LeaguePluginProps) {
         compareSemanticVersions(store.min_version, version) === -1
       ) {
         installedText = (
-          <Typography color="warning.main">
+          <Typography color="warning">
             Installed but unsupported(Update Fantasy Manger to Update)
           </Typography>
         );
       } else {
         installedText = (
-          <Typography color="warning.main">
-            Installed but out of Date
-          </Typography>
+          <Typography color="warning">Installed but out of Date</Typography>
         );
       }
     } else {
-      installedText = <Typography color="success.main">Installed</Typography>;
+      installedText = <Typography color="success">Installed</Typography>;
     }
   } else {
     if (store === "error") {
@@ -214,7 +212,7 @@ function LeaguePlugin({ data, store, version }: LeaguePluginProps) {
       compareSemanticVersions(store.min_version, version) === -1
     ) {
       installedText = (
-        <Typography color="warning.main">
+        <Typography color="warning">
           Unsupported (Update Fantasy Manger to Install)
         </Typography>
       );
@@ -238,7 +236,7 @@ function LeaguePlugin({ data, store, version }: LeaguePluginProps) {
       <TableCell>{data.url}</TableCell>
       <TableCell>
         {enabled ? (
-          <Typography color="success.main">Enabled</Typography>
+          <Typography color="success">Enabled</Typography>
         ) : (
           <Typography color="error">Disabled</Typography>
         )}
