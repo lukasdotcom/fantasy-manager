@@ -366,7 +366,7 @@ export async function updateData(
       );
       gameDone =
         lastUpdateTimestamp >
-        Math.min(previousDataGameEnd, clubDataFromPlugin.gameEnd);
+        Math.max(previousDataGameEnd, clubDataFromPlugin.gameEnd);
       const home =
         clubDataFromPlugin.home !== undefined
           ? clubDataFromPlugin.home
