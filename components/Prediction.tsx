@@ -127,6 +127,10 @@ export interface GameProps extends predictions {
   predictExact: number;
   readOnly?: boolean;
 }
+
+function isValidPredictionInput(value: number | null): boolean {
+  return value !== null && !isNaN(Number(value));
+}
 export function Game({
   home_team,
   home_team_name,
@@ -243,6 +247,7 @@ export function Game({
             type="number"
             size="small"
             value={home ?? ""}
+            error={!isValidPredictionInput(home)}
             onChange={updateHome}
             slotProps={{
               htmlInput: { min: 0, style: { textAlign: "center" } },
@@ -256,6 +261,7 @@ export function Game({
             type="number"
             size="small"
             value={away ?? ""}
+            error={!isValidPredictionInput(away)}
             onChange={updateAway}
             slotProps={{
               htmlInput: { min: 0, style: { textAlign: "center" } },
