@@ -86,7 +86,10 @@ export default function HistoricalView({
       <h1>{title_text}</h1>
       <Grid container spacing={2}>
         {predictions.map((e) => (
-          <Grid size={{ xl: 3, lg: 4, xs: 6 }} key={e.home_team}>
+          <Grid
+            size={{ xl: 3, lg: 4, xs: 6 }}
+            key={`${user}-${e.home_team}-${e.gameStart}`}
+          >
             <Game
               league={leagueID}
               predictWinner={leagueSettings.predictWinner}
