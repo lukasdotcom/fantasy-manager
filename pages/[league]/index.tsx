@@ -650,6 +650,7 @@ export const getServerSideProps: GetServerSideProps = async (
     const results = await db
       .selectFrom("points")
       .where("leagueID", "=", leagueID)
+      .orderBy("matchday", "asc")
       .selectAll()
       .execute();
     // Reformats the result into a dictionary that has an entry for each user and each entry for that user is an array of all the points the user has earned in chronological order.
