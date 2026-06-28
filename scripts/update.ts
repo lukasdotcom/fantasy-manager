@@ -204,7 +204,14 @@ export async function updateData(
   };
 
   const existingDbClubsSet: Set<string> = new Set(
-    (await db.selectFrom("clubs").select("club").execute()).map((c) => c.club),
+    (
+      await db
+        .selectFrom("clubs")
+        .select("club")
+        .where("league", "=", league)
+        .where("exists", "=", 1)
+        .execute()
+    ).map((c) => c.club),
   );
 
   for (const val of playersFromPlugin) {
@@ -245,7 +252,7 @@ export async function updateData(
     }
     const pictureID = pictureRecord.id;
 
-    if (val.club !== clubCache) {
+    if (val.exists && val.club !== clubCache) {
       clubCache = val.club;
       existingDbClubsSet.delete(clubCache); // Mark this club as processed from plugin data
       const clubDataFromPlugin = getClubFromPluginData(clubCache) || {
@@ -607,7 +614,7 @@ export async function updateData(
   } // End player loop
 
   // Set clubs not in plugin data as non-existent
-  for (const clubName in existingDbClubsSet) {
+  for (const clubName of Array.from(existingDbClubsSet)) {
     if (clubName) {
       // Ensure clubName is not empty/null if that's possible in your DB
       await db
