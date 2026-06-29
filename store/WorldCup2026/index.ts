@@ -92,8 +92,8 @@ const Main: dataGetter = async function () {
 
     const homeSquad = squadById.get(game.homeSquadId);
     const awaySquad = squadById.get(game.awaySquadId);
-    const homeScore = (game.homeScore ?? 0) + (game.homePenaltyScore ?? 0);
-    const awayScore = (game.awayScore ?? 0) + (game.awayPenaltyScore ?? 0);
+    const homeScore = game.homeScore ?? 0;
+    const awayScore = game.awayScore ?? 0;
 
     clubList.push(game.homeSquadAbbr);
     clubList.push(game.awaySquadAbbr);
